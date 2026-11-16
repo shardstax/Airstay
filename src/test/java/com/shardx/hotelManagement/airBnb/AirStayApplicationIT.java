@@ -8,6 +8,9 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** The application starts against a real PostgreSQL, Flyway migrates it and Hibernate validates the schema. */
@@ -52,5 +55,27 @@ class AirStayApplicationIT extends IntegrationTestBase {
                 default -> throw new AssertionError("Unexpected search parameter: " + name);
             }
         }
+    }
+
+    /** Swagger UI labels a status code "Undocumented" unless the API docs list it, so docs must match behaviour. */
+    @Test
+    void successStatusCodesAreDocumentedAsTheyAreReturned() {
+        JsonNode docs = get("/v3/api-docs", null).getBody();
+        assertThat(docs).isNotNull();
+        JsonNode paths = docs.path("paths");
+
+        assertThat(documentedStatuses(paths, "/auth/signup", "post")).containsExactly("201");
+        assertThat(documentedStatuses(paths, "/bookings/init", "post")).containsExactly("201");
+        assertThat(documentedStatuses(paths, "/admin/hotels", "post")).containsExactly("201");
+        assertThat(documentedStatuses(paths, "/bookings/{bookingId}/cancel", "post")).containsExactly("204");
+        assertThat(documentedStatuses(paths, "/admin/hotels/{hotelId}/activate", "patch")).containsExactly("204");
+        assertThat(documentedStatuses(paths, "/webhook/payment", "post")).containsExactly("204");
+        assertThat(documentedStatuses(paths, "/hotels/search", "get")).containsExactly("200");
+    }
+
+    private static List<String> documentedStatuses(JsonNode paths, String path, String method) {
+        List<String> statuses = new ArrayList<>();
+        paths.path(path).path(method).path("responses").fieldNames().forEachRemaining(statuses::add);
+        return statuses;
     }
 }

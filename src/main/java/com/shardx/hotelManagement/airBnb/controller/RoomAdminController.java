@@ -4,6 +4,7 @@ import com.shardx.hotelManagement.airBnb.dto.RoomDto;
 import com.shardx.hotelManagement.airBnb.service.RoomService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +21,7 @@ public class RoomAdminController {
 
     @PostMapping
     @Operation(summary = "Add a room type to the hotel", tags = {"Admin Rooms"})
+    @ApiResponse(responseCode = "201", description = "Created")
     public ResponseEntity<RoomDto> createNewRoom(@PathVariable Long hotelId,
                                                  @Valid @RequestBody RoomDto roomDto) {
         RoomDto room = roomService.createNewRoom(hotelId, roomDto);
@@ -40,6 +42,7 @@ public class RoomAdminController {
 
     @DeleteMapping("/{roomId}")
     @Operation(summary = "Delete a room type that has no bookings", tags = {"Admin Rooms"})
+    @ApiResponse(responseCode = "204", description = "Deleted")
     public ResponseEntity<Void> deleteRoomById(@PathVariable Long hotelId, @PathVariable Long roomId) {
         roomService.deleteRoomById(hotelId, roomId);
         return ResponseEntity.noContent().build();

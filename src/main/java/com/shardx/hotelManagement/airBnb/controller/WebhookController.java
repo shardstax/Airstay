@@ -6,6 +6,7 @@ import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.Event;
 import com.stripe.net.Webhook;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +28,7 @@ public class WebhookController {
      */
     @PostMapping("/payment")
     @Operation(summary = "Stripe webhook: confirm or release bookings from checkout events", tags = {"Webhook"})
+    @ApiResponse(responseCode = "204", description = "Event processed")
     public ResponseEntity<Void> capturePayments(@RequestBody String payload,
                                                 @RequestHeader("Stripe-Signature") String sigHeader) {
         Event event;

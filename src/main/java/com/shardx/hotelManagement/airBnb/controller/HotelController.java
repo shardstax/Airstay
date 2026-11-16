@@ -8,6 +8,7 @@ import com.shardx.hotelManagement.airBnb.service.BookingService;
 import com.shardx.hotelManagement.airBnb.service.HotelService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -29,6 +30,7 @@ public class HotelController {
 
     @PostMapping
     @Operation(summary = "Create a new hotel", tags = {"Admin Hotel"})
+    @ApiResponse(responseCode = "201", description = "Created")
     public ResponseEntity<HotelDto> createNewHotel(@Valid @RequestBody HotelDto hotelDto) {
         log.info("Attempting to create a new hotel with name: "+hotelDto.getName());
         HotelDto hotel = hotelService.createNewHotel(hotelDto);
@@ -51,6 +53,7 @@ public class HotelController {
 
     @DeleteMapping("/{hotelId}")
     @Operation(summary = "Delete a hotel", tags = {"Admin Hotel"})
+    @ApiResponse(responseCode = "204", description = "Deleted")
     public ResponseEntity<Void> deleteHotelById(@PathVariable Long hotelId) {
         hotelService.deleteHotelById(hotelId);
         return ResponseEntity.noContent().build();
@@ -58,6 +61,7 @@ public class HotelController {
 
     @PatchMapping("/{hotelId}/activate")
     @Operation(summary = "Activate a hotel", tags = {"Admin Hotel"})
+    @ApiResponse(responseCode = "204", description = "Activated")
     public ResponseEntity<Void> activateHotel(@PathVariable Long hotelId) {
         hotelService.activateHotel(hotelId);
         return ResponseEntity.noContent().build();

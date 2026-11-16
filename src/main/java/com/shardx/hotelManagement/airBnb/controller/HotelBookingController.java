@@ -4,6 +4,7 @@ import com.shardx.hotelManagement.airBnb.dto.*;
 import com.shardx.hotelManagement.airBnb.service.BookingService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +21,7 @@ public class HotelBookingController {
 
     @PostMapping("/init")
     @Operation(summary = "Hold rooms for a stay (the hold lasts a few minutes until payment starts)", tags = {"Booking Flow"})
+    @ApiResponse(responseCode = "201", description = "Rooms are held")
     public ResponseEntity<BookingDto> initialiseBooking(@Valid @RequestBody BookingRequest bookingRequest) {
         return ResponseEntity.status(HttpStatus.CREATED).body(bookingService.initialiseBooking(bookingRequest));
     }
@@ -40,6 +42,7 @@ public class HotelBookingController {
 
     @PostMapping("/{bookingId}/cancel")
     @Operation(summary = "Cancel a confirmed booking before check-in and refund it", tags = {"Booking Flow"})
+    @ApiResponse(responseCode = "204", description = "Cancelled and refund started")
     public ResponseEntity<Void> cancelBooking(@PathVariable Long bookingId) {
         bookingService.cancelBooking(bookingId);
         return ResponseEntity.noContent().build();

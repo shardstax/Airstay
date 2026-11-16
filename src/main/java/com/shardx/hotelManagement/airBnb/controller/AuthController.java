@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -38,6 +39,7 @@ public class AuthController {
 
     @PostMapping("/signup")
     @Operation(summary = "Create an account (guest or hotel manager)", tags = {"Auth"})
+    @ApiResponse(responseCode = "201", description = "Created")
     public ResponseEntity<UserDto> signup(@Valid @RequestBody SignUpRequestDto signUpRequestDto) {
         return new ResponseEntity<>(authService.signUp(signUpRequestDto), HttpStatus.CREATED);
     }
@@ -65,6 +67,7 @@ public class AuthController {
 
     @PostMapping("/logout")
     @Operation(summary = "Clear the refresh-token cookie", tags = {"Auth"})
+    @ApiResponse(responseCode = "204", description = "Logged out")
     public ResponseEntity<Void> logout(HttpServletRequest request, HttpServletResponse response) {
         response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie(request, "", Duration.ZERO).toString());
         return ResponseEntity.noContent().build();

@@ -4,6 +4,7 @@ import com.shardx.hotelManagement.airBnb.dto.InventoryDto;
 import com.shardx.hotelManagement.airBnb.dto.UpdateInventoryRequestDto;
 import com.shardx.hotelManagement.airBnb.service.InventoryService;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +24,7 @@ public class InventoryController {
     }
 
     @PatchMapping("/rooms/{roomId}")
+    @ApiResponse(responseCode = "204", description = "Updated")
     public ResponseEntity<Void> updateInventory(@PathVariable Long roomId,
                                                 @Valid @RequestBody UpdateInventoryRequestDto updateInventoryRequestDto) {
         inventoryService.updateInventory(roomId, updateInventoryRequestDto);
