@@ -31,4 +31,26 @@ class AirStayApplicationIT extends IntegrationTestBase {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().path("status").asText()).isEqualTo("UP");
     }
+
+    /**
+     * Swagger UI will not send a request while a parameter marked required is empty, so the docs must not mark
+     * parameters that have defaults (roomsCount, page, size) as required. Found by driving Swagger UI in a browser.
+     */
+    @Test
+    void searchParametersWithDefaultsAreOptionalInTheApiDocs() {
+        JsonNode docs = get("/v3/api-docs", null).getBody();
+        assertThat(docs).isNotNull();
+
+        JsonNode parameters = docs.path("paths").path("/hotels/search").path("get").path("parameters");
+        assertThat(parameters).isNotEmpty();
+        for (JsonNode parameter : parameters) {
+            String name = parameter.path("name").asText();
+            boolean required = parameter.path("required").asBoolean();
+            switch (name) {
+                case "roomsCount", "page", "size" -> assertThat(required).as("%s is optional", name).isFalse();
+                case "city", "startDate", "endDate" -> assertThat(required).as("%s is required", name).isTrue();
+                default -> throw new AssertionError("Unexpected search parameter: " + name);
+            }
+        }
+    }
 }

@@ -1,6 +1,8 @@
 package com.shardx.hotelManagement.airBnb.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -20,10 +22,15 @@ public class HotelInfoRequestDto {
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     private LocalDate endDate;
 
-    @NotNull
+    @Parameter(description = "Rooms needed", required = false, schema = @Schema(defaultValue = "1"))
     @Min(1)
     @Max(10)
     private Long roomsCount = 1L;
+
+    // Empty or missing values fall back to the default instead of failing.
+    public Long getRoomsCount() {
+        return roomsCount == null ? 1L : roomsCount;
+    }
 
     @JsonIgnore
     @AssertTrue(message = "endDate (check-out) must be after startDate (check-in)")
