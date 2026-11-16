@@ -1,12 +1,15 @@
 # AirStay
 
+![CI](https://github.com/shardstax/HotelHub-SaaS/actions/workflows/ci.yml/badge.svg)
+
 Hotel booking backend built with Spring Boot: hotel search with live availability, per-night inventory,
 time-limited room holds, layered dynamic pricing and Stripe Checkout payments.
 
 ## Tech stack
 
 Java 21 · Spring Boot 3.5 · Spring Data JPA (Hibernate) · Spring Security + JWT · PostgreSQL · Flyway ·
-Stripe Checkout + webhooks · Bean Validation · springdoc OpenAPI
+Stripe Checkout + webhooks · Bean Validation · springdoc OpenAPI · JUnit 5 · Mockito · Testcontainers ·
+JaCoCo · GitHub Actions
 
 ## How booking works
 
@@ -54,6 +57,7 @@ and immediately after an owner changes a room price or surge factor.
 ## Running locally
 
 Requirements: JDK 21, PostgreSQL 16+ with an empty database, Stripe test keys, optionally the Stripe CLI.
+Docker is only needed for the integration tests.
 
 ```bash
 cp .env.example .env            # fill in the values
@@ -66,6 +70,25 @@ Flyway creates the schema on first start (`src/main/resources/db/migration`). Hi
 - API base: `http://localhost:8080/api/v1`
 - Swagger UI: `http://localhost:8080/api/v1/swagger-ui.html`
 - Stripe webhooks: `stripe listen --forward-to localhost:8080/api/v1/webhook/payment`
+
+## Testing
+
+```bash
+./mvnw test     # unit tests only: fast, no Docker needed
+./mvnw verify   # unit + integration tests (needs Docker) + coverage report in target/site/jacoco
+```
+
+- **Unit tests** (`*Test`, JUnit 5 + Mockito): every pricing rule and how they stack, JWT type and
+  tamper checks, and the booking state machine (holds, guests, payment, webhook idempotency, refunds
+  after commit, expiry, cancellation).
+- **Integration tests** (`*IT`): the real app over HTTP against PostgreSQL 16 in Testcontainers, migrated
+  by Flyway. Only Stripe is mocked; webhooks are sent with real Stripe signatures.
+  - Full journey: search, hold, guests, payment, webhook, duplicate webhook, cancel and refund, with
+    inventory counts checked in the database after every step.
+  - Concurrency: 25 simultaneous requests for the last room give exactly one booking; 30 simultaneous
+    overlapping stays never put any night over capacity and never deadlock.
+  - Hold expiry, security rules (401/403, refresh-token misuse, ownership) and error responses.
+- **CI**: GitHub Actions runs `./mvnw verify` on every push and pull request.
 
 ## API overview
 
