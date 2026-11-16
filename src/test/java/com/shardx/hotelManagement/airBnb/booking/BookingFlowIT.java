@@ -32,6 +32,13 @@ class BookingFlowIT extends IntegrationTestBase {
         assertThat(results).hasSize(1);
         assertThat(results.get(0).path("id").asLong()).isEqualTo(hotel.hotelId());
         assertThat(results.get(0).path("price").asDouble()).isEqualTo(1000.0);
+        // The paging block is part of the public contract (PagedModel shape, not Spring's internal Page JSON)
+        JsonNode page = data(search).path("page");
+        assertThat(page.path("totalElements").asLong()).isEqualTo(1);
+        assertThat(page.path("totalPages").asInt()).isEqualTo(1);
+        assertThat(page.path("number").asInt()).isZero();
+        assertThat(page.path("size").asInt()).isEqualTo(10);
+        assertThat(data(search).has("pageable")).as("Spring's internal Page fields must not leak").isFalse();
 
         // Hold: both nights are reserved, the departure day is not
         String guest = newGuestToken();

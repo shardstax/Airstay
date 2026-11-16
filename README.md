@@ -121,3 +121,5 @@ Flyway creates the schema on first start (`src/main/resources/db/migration`). Hi
 | Manager | `/admin/hotels` CRUD + `activate`, `bookings`, `reports`; `/admin/hotels/{id}/rooms`; `/admin/inventory/rooms/{id}` |
 
 All responses use one envelope: `{ "timeStamp", "data", "error": { "status", "message", "subErrors" } }`.
+Search is paged (`page`, `size` query parameters, both optional): `data` is
+`{ "content": [...], "page": { "size", "number", "totalElements", "totalPages" } }`.

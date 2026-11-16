@@ -7,7 +7,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
-import org.springframework.data.domain.Page;
+import org.springframework.data.web.PagedModel;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,9 +22,11 @@ public class HotelBrowseController {
 
     @GetMapping("/search")
     @Operation(summary = "Search hotels with rooms free on every night of the stay", tags = {"Browse Hotels"})
-    public ResponseEntity<Page<HotelPriceResponseDto>> searchHotels(
+    public ResponseEntity<PagedModel<HotelPriceResponseDto>> searchHotels(
             @Valid @ParameterObject @ModelAttribute HotelSearchRequest hotelSearchRequest) {
-        return ResponseEntity.ok(inventoryService.searchHotels(hotelSearchRequest));
+        // PagedModel has a documented, stable JSON shape: { content: [...], page: { size, number, totalElements,
+        // totalPages } }. Returning Spring Data's Page directly leaves the shape unspecified (and logs a warning).
+        return ResponseEntity.ok(new PagedModel<>(inventoryService.searchHotels(hotelSearchRequest)));
     }
 
     @GetMapping("/{hotelId}/info")
