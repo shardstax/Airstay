@@ -1,6 +1,6 @@
 # AirStay
 
-![CI](https://github.com/shardstax/HotelHub-SaaS/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/shardstax/Airstay/actions/workflows/ci.yml/badge.svg)
 
 Hotel booking backend built with Spring Boot: hotel search with live availability, per-night inventory,
 time-limited room holds, layered dynamic pricing and Stripe Checkout payments.
