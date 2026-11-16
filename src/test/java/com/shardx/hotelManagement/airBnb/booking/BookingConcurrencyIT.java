@@ -2,13 +2,20 @@ package com.shardx.hotelManagement.airBnb.booking;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.shardx.hotelManagement.airBnb.support.IntegrationTestBase;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
+import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.web.client.DefaultResponseErrorHandler;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.DefaultUriBuilderFactory;
 
+import java.net.http.HttpClient;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.stream.IntStream;
 
@@ -22,6 +29,25 @@ class BookingConcurrencyIT extends IntegrationTestBase {
 
     private static final String SOLD_OUT_MESSAGE = "Room is not available for the selected dates";
 
+    /**
+     * The shared TestRestTemplate pools at most 5 connections per host, which would quietly queue most
+     * of the "simultaneous" requests. This client opens a connection per request, so they really race.
+     */
+    private RestTemplate racingClient;
+
+    @BeforeEach
+    void createRacingClient() {
+        HttpClient httpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
+        racingClient = new RestTemplate(new JdkClientHttpRequestFactory(httpClient));
+        racingClient.setUriTemplateHandler(new DefaultUriBuilderFactory(rest.getRootUri()));
+        racingClient.setErrorHandler(new DefaultResponseErrorHandler() {
+            @Override
+            public boolean hasError(ClientHttpResponse response) {
+                return false; // 409s are expected answers here, not exceptions
+            }
+        });
+    }
+
     @Test
     void exactlyOneOfManySimultaneousRequestsGetsTheLastRoom() throws Exception {
         int requests = 25;
@@ -31,7 +57,7 @@ class BookingConcurrencyIT extends IntegrationTestBase {
         LocalDate checkOut = checkIn.plusDays(2);
 
         List<ResponseEntity<JsonNode>> responses = runAtTheSameTime(IntStream.range(0, requests)
-                .<Callable<ResponseEntity<JsonNode>>>mapToObj(i -> () -> initBooking(guest, hotel, checkIn, checkOut, 1))
+                .<Callable<ResponseEntity<JsonNode>>>mapToObj(i -> () -> racingInitBooking(guest, hotel, checkIn, checkOut))
                 .toList());
 
         assertThat(responses).filteredOn(r -> r.getStatusCode().value() == HttpStatus.CREATED.value()).hasSize(1);
@@ -65,7 +91,7 @@ class BookingConcurrencyIT extends IntegrationTestBase {
 
         List<ResponseEntity<JsonNode>> responses = runAtTheSameTime(stays.stream()
                 .<Callable<ResponseEntity<JsonNode>>>map(stay -> () ->
-                        initBooking(guest, hotel, stay.checkIn(), stay.checkOut(), 1))
+                        racingInitBooking(guest, hotel, stay.checkIn(), stay.checkOut()))
                 .toList());
 
         List<Stay> accepted = new ArrayList<>();
@@ -89,6 +115,19 @@ class BookingConcurrencyIT extends IntegrationTestBase {
                     .isEqualTo((int) expected)
                     .isLessThanOrEqualTo(capacity);
         }
+    }
+
+    private ResponseEntity<JsonNode> racingInitBooking(String token, TestHotel hotel, LocalDate checkIn, LocalDate checkOut) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(token);
+        Map<String, Object> body = Map.of(
+                "hotelId", hotel.hotelId(),
+                "roomId", hotel.roomId(),
+                "checkInDate", checkIn.toString(),
+                "checkOutDate", checkOut.toString(),
+                "roomsCount", 1);
+        return racingClient.exchange("/bookings/init", HttpMethod.POST, new HttpEntity<>(body, headers), JsonNode.class);
     }
 
     /** Starts every task at once (behind a latch) and returns the results in task order. */
