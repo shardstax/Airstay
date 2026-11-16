@@ -9,7 +9,7 @@ time-limited room holds, layered dynamic pricing and Stripe Checkout payments.
 
 Java 21 · Spring Boot 3.5 · Spring Data JPA (Hibernate) · Spring Security + JWT · PostgreSQL · Flyway ·
 Stripe Checkout + webhooks · Bean Validation · springdoc OpenAPI · JUnit 5 · Mockito · Testcontainers ·
-JaCoCo · GitHub Actions
+JaCoCo · GitHub Actions · Docker · Docker Compose · Spring Boot Actuator
 
 ## How booking works
 
@@ -54,7 +54,26 @@ and immediately after an owner changes a room price or surge factor.
   `HOTEL_MANAGER`. Every hotel, room, inventory, guest and booking operation checks ownership.
 - CORS is enforced by Spring Security for the configured frontend origins.
 
-## Running locally
+## Running with Docker (recommended)
+
+Only Docker is required; the Java build happens inside the image.
+
+```bash
+docker compose up --build        # PostgreSQL 16 + AirStay, ready when both health checks pass
+docker compose down              # stop (add --volumes to also delete the database)
+```
+
+- API: `http://localhost:8080/api/v1` · Swagger UI: `http://localhost:8080/api/v1/swagger-ui.html`
+- Health: `http://localhost:8080/api/v1/actuator/health`
+- It starts with local-only defaults. To take test payments, copy `.env.example` to `.env`, add your
+  Stripe test key and run `docker compose --profile stripe up --build`. The Stripe CLI container prints a
+  `whsec_...` secret: put it in `.env` as `STRIPE_WEBHOOK_SECRET` and restart the app.
+
+The image is a multi-stage build: Maven compiles in a JDK image, the jar is split into layers (code changes
+rebuild only the last layer), and the runtime is a ~150 MB JRE-only Alpine image running as a non-root
+user. Profiles: `dev` (default in compose, debug logs) and `prod` (JSON logs, proxy headers).
+
+## Running without Docker
 
 Requirements: JDK 21, PostgreSQL 16+ with an empty database, Stripe test keys, optionally the Stripe CLI.
 Docker is only needed for the integration tests.
@@ -88,7 +107,8 @@ Flyway creates the schema on first start (`src/main/resources/db/migration`). Hi
   - Concurrency: 25 simultaneous requests for the last room give exactly one booking; 30 simultaneous
     overlapping stays never put any night over capacity and never deadlock.
   - Hold expiry, security rules (401/403, refresh-token misuse, ownership) and error responses.
-- **CI**: GitHub Actions runs `./mvnw verify` on every push and pull request.
+- **CI**: GitHub Actions runs `./mvnw verify` on every push and pull request, then builds the Docker image,
+  starts the compose stack and smoke-tests the running API.
 
 ## API overview
 
