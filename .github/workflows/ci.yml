@@ -53,3 +53,35 @@ jobs:
             awk -F, 'NR>1 { missed+=$8; covered+=$9 } END { if (missed+covered>0) printf "Line coverage: %.1f%%\n", 100*covered/(missed+covered) }' \
               target/site/jacoco/jacoco.csv | tee -a "$GITHUB_STEP_SUMMARY"
           fi
+
+  docker:
+    name: Docker image and compose smoke test
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Builds the image and starts app + PostgreSQL; --wait fails the step unless both health checks pass.
+      - name: Start the stack
+        run: docker compose up --build --detach --wait --wait-timeout 300
+
+      - name: Smoke test the API
+        run: |
+          B=http://localhost:8080/api/v1
+          curl -fsS "$B/actuator/health" | grep -q '"status":"UP"'
+          curl -fsS -o /dev/null -X POST "$B/auth/signup" -H 'Content-Type: application/json' \
+            -d '{"email":"ci@example.com","password":"Password123!","name":"CI"}'
+          curl -fsS -X POST "$B/auth/login" -H 'Content-Type: application/json' \
+            -d '{"email":"ci@example.com","password":"Password123!"}' | grep -q accessToken
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$B/users/profile")" = "401"
+          echo "Image size: $(docker image inspect airstay:local --format '{{.Size}}' | numfmt --to=iec)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: App logs on failure
+        if: failure()
+        run: docker compose logs app
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose down --volumes
