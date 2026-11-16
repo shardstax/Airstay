@@ -2,14 +2,12 @@ package com.shardx.hotelManagement.airBnb.service;
 
 import com.shardx.hotelManagement.airBnb.dto.BookingDto;
 import com.shardx.hotelManagement.airBnb.dto.BookingRequest;
-import com.shardx.hotelManagement.airBnb.dto.GuestDto;
 import com.shardx.hotelManagement.airBnb.dto.HotelReportDto;
 import com.shardx.hotelManagement.airBnb.entity.enums.BookingStatus;
 import com.stripe.model.Event;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 
 public interface BookingService {
 
@@ -30,4 +28,7 @@ public interface BookingService {
     HotelReportDto getHotelReport(Long hotelId, LocalDate startDate, LocalDate endDate);
 
     List<BookingDto> getMyBookings();
+
+    /** Releases the held rooms of an unpaid booking whose hold has lapsed. No-op otherwise. */
+    void expireBooking(Long bookingId);
 }

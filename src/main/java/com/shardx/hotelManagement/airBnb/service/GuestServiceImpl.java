@@ -4,7 +4,7 @@ import com.shardx.hotelManagement.airBnb.dto.GuestDto;
 import com.shardx.hotelManagement.airBnb.entity.Guest;
 import com.shardx.hotelManagement.airBnb.entity.User;
 import com.shardx.hotelManagement.airBnb.repository.GuestRepository;
-import jakarta.persistence.EntityNotFoundException;
+import com.shardx.hotelManagement.airBnb.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
@@ -39,6 +39,7 @@ public class GuestServiceImpl implements GuestService {
         log.info("Adding new guest: {}", guestDto);
         User user = getCurrentUser();
         Guest guest = modelMapper.map(guestDto, Guest.class);
+        guest.setId(null); // never let a client choose (or overwrite) an id
         guest.setUser(user);
         Guest savedGuest = guestRepository.save(guest);
         log.info("Guest added with ID: {}", savedGuest.getId());
@@ -49,7 +50,7 @@ public class GuestServiceImpl implements GuestService {
     public void updateGuest(Long guestId, GuestDto guestDto) {
         log.info("Updating guest with ID: {}", guestId);
         Guest guest = guestRepository.findById(guestId)
-                .orElseThrow(() -> new EntityNotFoundException("Guest not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Guest not found with id: " + guestId));
 
         User user = getCurrentUser();
         if(!user.equals(guest.getUser())) throw new AccessDeniedException("You are not the owner of this guest");
@@ -66,7 +67,7 @@ public class GuestServiceImpl implements GuestService {
     public void deleteGuest(Long guestId) {
         log.info("Deleting guest with ID: {}", guestId);
         Guest guest = guestRepository.findById(guestId)
-                .orElseThrow(() -> new EntityNotFoundException("Guest not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Guest not found with id: " + guestId));
 
         User user = getCurrentUser();
         if(!user.equals(guest.getUser())) throw new AccessDeniedException("You are not the owner of this guest");

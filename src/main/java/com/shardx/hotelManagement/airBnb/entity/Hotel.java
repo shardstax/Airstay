@@ -43,15 +43,11 @@ public class Hotel {
     @Column(nullable = false)
     private Boolean active;
 
-
     @ManyToOne(optional = false)
+    @JoinColumn(name = "owner_id", nullable = false)
     private User owner;
 
     @OneToMany(mappedBy = "hotel")
     @JsonIgnore
     private List<Room> rooms;
-
 }
-
-
-

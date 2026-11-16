@@ -7,8 +7,10 @@ import com.shardx.hotelManagement.airBnb.entity.Hotel;
 import com.shardx.hotelManagement.airBnb.service.BookingService;
 import com.shardx.hotelManagement.airBnb.service.HotelService;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -27,7 +29,7 @@ public class HotelController {
 
     @PostMapping
     @Operation(summary = "Create a new hotel", tags = {"Admin Hotel"})
-    public ResponseEntity<HotelDto> createNewHotel(@RequestBody HotelDto hotelDto) {
+    public ResponseEntity<HotelDto> createNewHotel(@Valid @RequestBody HotelDto hotelDto) {
         log.info("Attempting to create a new hotel with name: "+hotelDto.getName());
         HotelDto hotel = hotelService.createNewHotel(hotelDto);
         return new ResponseEntity<>(hotel, HttpStatus.CREATED);
@@ -42,7 +44,7 @@ public class HotelController {
 
     @PutMapping("/{hotelId}")
     @Operation(summary = "Update a hotel", tags = {"Admin Hotel"})
-    public ResponseEntity<HotelDto> updateHotelById(@PathVariable Long hotelId, @RequestBody HotelDto hotelDto) {
+    public ResponseEntity<HotelDto> updateHotelById(@PathVariable Long hotelId, @Valid @RequestBody HotelDto hotelDto) {
         HotelDto hotel = hotelService.updateHotelById(hotelId, hotelDto);
         return ResponseEntity.ok(hotel);
     }
@@ -76,8 +78,8 @@ public class HotelController {
     @GetMapping("/{hotelId}/reports")
     @Operation(summary = "Generate a bookings report of a hotel", tags = {"Admin Bookings"})
     public ResponseEntity<HotelReportDto> getHotelReport(@PathVariable Long hotelId,
-                                                         @RequestParam(required = false) LocalDate startDate,
-                                                         @RequestParam(required = false) LocalDate endDate) {
+                                                         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+                                                         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
 
         if (startDate == null) startDate = LocalDate.now().minusMonths(1);
         if (endDate == null) endDate = LocalDate.now();

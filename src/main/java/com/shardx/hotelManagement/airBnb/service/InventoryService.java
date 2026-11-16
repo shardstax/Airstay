@@ -17,4 +17,7 @@ public interface InventoryService {
     List<InventoryDto> getAllInventoryByRoom(Long roomId);
 
     void updateInventory(Long roomId, UpdateInventoryRequestDto updateInventoryRequestDto);
+
+    /** Applies a new room count to all future nights; refuses if it would drop below rooms already held or sold. */
+    void updateRoomCapacity(Room room, int newTotalCount);
 }

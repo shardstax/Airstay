@@ -5,54 +5,79 @@ import com.shardx.hotelManagement.airBnb.dto.LoginResponseDto;
 import com.shardx.hotelManagement.airBnb.dto.SignUpRequestDto;
 import com.shardx.hotelManagement.airBnb.dto.UserDto;
 import com.shardx.hotelManagement.airBnb.security.AuthService;
-import jakarta.servlet.http.Cookie;
+import com.shardx.hotelManagement.airBnb.security.JWTService;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationServiceException;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
-import java.util.Arrays;
+import java.time.Duration;
 
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
 public class AuthController {
 
+    private static final String REFRESH_COOKIE = "refreshToken";
+
     private final AuthService authService;
 
+    @Value("${airstay.security.refresh-cookie.secure}")
+    private boolean refreshCookieSecure;
+
+    @Value("${airstay.security.refresh-cookie.same-site}")
+    private String refreshCookieSameSite;
+
     @PostMapping("/signup")
-    public ResponseEntity<UserDto> signup(@RequestBody SignUpRequestDto signUpRequestDto){
+    @Operation(summary = "Create an account (guest or hotel manager)", tags = {"Auth"})
+    public ResponseEntity<UserDto> signup(@Valid @RequestBody SignUpRequestDto signUpRequestDto) {
         return new ResponseEntity<>(authService.signUp(signUpRequestDto), HttpStatus.CREATED);
     }
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponseDto> login(@RequestBody LoginDto loginDto, HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse) {
-        String[] tokens = authService.login(loginDto);
-
-        Cookie cookie = new Cookie("refreshToken", tokens[1]);
-        cookie.setHttpOnly(true);
-
-        httpServletResponse.addCookie(cookie);
-
-        return ResponseEntity.ok(new LoginResponseDto(tokens[0]));
-
+    @Operation(summary = "Log in; returns an access token and sets the refresh-token cookie", tags = {"Auth"})
+    public ResponseEntity<LoginResponseDto> login(@Valid @RequestBody LoginDto loginDto,
+                                                  HttpServletRequest request,
+                                                  HttpServletResponse response) {
+        AuthService.AuthTokens tokens = authService.login(loginDto);
+        response.addHeader(HttpHeaders.SET_COOKIE,
+                refreshCookie(request, tokens.refreshToken(), JWTService.REFRESH_TOKEN_TTL).toString());
+        return ResponseEntity.ok(new LoginResponseDto(tokens.accessToken()));
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<LoginResponseDto> refresh(HttpServletRequest request) {
-        String refreshToken = Arrays.stream(request.getCookies()).
-                filter(cookie -> "refreshToken".equals(cookie.getName()))
-                .findFirst()
-                .map(Cookie::getValue)
-                .orElseThrow(() -> new AuthenticationServiceException("Refresh token not found inside the Cookies"));
+    @Operation(summary = "Get a new access token using the refresh-token cookie", tags = {"Auth"})
+    public ResponseEntity<LoginResponseDto> refresh(
+            @CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new AuthenticationServiceException("Refresh token cookie is missing");
+        }
+        return ResponseEntity.ok(new LoginResponseDto(authService.refreshToken(refreshToken)));
+    }
 
-        String accessToken = authService.refreshToken(refreshToken);
-        return ResponseEntity.ok(new LoginResponseDto(accessToken));
+    @PostMapping("/logout")
+    @Operation(summary = "Clear the refresh-token cookie", tags = {"Auth"})
+    public ResponseEntity<Void> logout(HttpServletRequest request, HttpServletResponse response) {
+        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie(request, "", Duration.ZERO).toString());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** httpOnly, scoped to the auth endpoints only, so the browser never sends it to the rest of the API. */
+    private ResponseCookie refreshCookie(HttpServletRequest request, String value, Duration maxAge) {
+        return ResponseCookie.from(REFRESH_COOKIE, value)
+                .httpOnly(true)
+                .secure(refreshCookieSecure)
+                .sameSite(refreshCookieSameSite)
+                .path(request.getContextPath() + "/auth")
+                .maxAge(maxAge)
+                .build();
     }
 }

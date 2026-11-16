@@ -3,6 +3,7 @@ package com.shardx.hotelManagement.airBnb.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
@@ -20,6 +21,9 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+// UPDATEs only write changed columns. The pricing job changes just `price`, so it can never write back
+// stale booked/reserved counts over a booking that committed while it was running.
+@DynamicUpdate
 public class Inventory {
 
     @Id

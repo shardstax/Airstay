@@ -34,7 +34,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
 
         if(profileUpdateRequestDto.getDateOfBirth() != null) user.setDateOfBirth(profileUpdateRequestDto.getDateOfBirth());
         if(profileUpdateRequestDto.getGender() != null) user.setGender(profileUpdateRequestDto.getGender());
-        if (profileUpdateRequestDto.getName() != null) user.setName(profileUpdateRequestDto.getName());
+        if (profileUpdateRequestDto.getName() != null) user.setName(profileUpdateRequestDto.getName().trim());
 
         userRepository.save(user);
     }
@@ -48,6 +48,8 @@ public class UserServiceImpl implements UserService, UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        return userRepository.findByEmail(username).orElse(null);
+        // Spring Security turns this into a generic "bad credentials" response, so emails are not leaked.
+        return userRepository.findByEmail(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
     }
 }

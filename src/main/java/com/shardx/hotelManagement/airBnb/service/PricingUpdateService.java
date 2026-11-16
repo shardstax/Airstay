@@ -14,8 +14,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -23,50 +25,59 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Keeps stored nightly prices (inventory.price) and each hotel's daily "from" price (hotel_min_price)
+ * up to date. Runs hourly, and on demand after owners change prices or surge factors.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
-@Transactional
 public class PricingUpdateService {
 
-    // Scheduler to update the inventory and HotelMinPrice tables every hour
+    private static final int HOTEL_BATCH_SIZE = 100;
 
     private final HotelRepository hotelRepository;
     private final InventoryRepository inventoryRepository;
     private final HotelMinPriceRepository hotelMinPriceRepository;
     private final PricingService pricingService;
+    private final TransactionTemplate transactionTemplate;
+    private final Clock clock;
 
-//    @Scheduled(cron = "*/5 * * * * *")
+    /** Each hotel is priced in its own short transaction, so bookings are never blocked for the whole run. */
     @Scheduled(cron = "0 0 * * * *")
     public void updatePrices() {
         int page = 0;
-        int batchSize = 100;
-
-        while(true) {
-            Page<Hotel> hotelPage = hotelRepository.findAll(PageRequest.of(page, batchSize));
-            if(hotelPage.isEmpty()) {
+        while (true) {
+            Page<Hotel> hotelPage = hotelRepository.findAll(PageRequest.of(page, HOTEL_BATCH_SIZE));
+            if (hotelPage.isEmpty()) {
                 break;
             }
-            hotelPage.getContent().forEach(this::updateHotelPrices);
-
+            for (Hotel hotel : hotelPage.getContent()) {
+                try {
+                    transactionTemplate.executeWithoutResult(status -> updateHotelPrices(hotel));
+                } catch (RuntimeException e) {
+                    log.error("Price update failed for hotel {}; will retry next run", hotel.getId(), e);
+                }
+            }
             page++;
         }
     }
 
-    private void updateHotelPrices(Hotel hotel) {
+    /** Recomputes stored nightly prices and the hotel's daily "from" price. Joins the caller's transaction. */
+    @Transactional
+    public void updateHotelPrices(Hotel hotel) {
         log.info("Updating hotel prices for hotel ID: {}", hotel.getId());
-        LocalDate startDate = LocalDate.now();
-        LocalDate endDate = LocalDate.now().plusYears(1);
+        LocalDate startDate = LocalDate.now(clock);
+        LocalDate endDate = startDate.plusYears(1);
 
         List<Inventory> inventoryList = inventoryRepository.findByHotelAndDateBetween(hotel, startDate, endDate);
 
         updateInventoryPrices(inventoryList);
-
-        updateHotelMinPrice(hotel, inventoryList, startDate, endDate);
+        updateHotelMinPrice(hotel, inventoryList);
     }
 
-    private void updateHotelMinPrice(Hotel hotel, List<Inventory> inventoryList, LocalDate startDate, LocalDate endDate) {
-        // Compute minimum price per day for the hotel
+    private void updateHotelMinPrice(Hotel hotel, List<Inventory> inventoryList) {
+        // Lowest room price per night for the hotel
         Map<LocalDate, BigDecimal> dailyMinPrices = inventoryList.stream()
                 .collect(Collectors.groupingBy(
                         Inventory::getDate,
@@ -75,7 +86,6 @@ public class PricingUpdateService {
                 .entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().orElse(BigDecimal.ZERO)));
 
-        // Prepare HotelPrice entities in bulk
         List<HotelMinPrice> hotelPrices = new ArrayList<>();
         dailyMinPrices.forEach((date, price) -> {
             HotelMinPrice hotelPrice = hotelMinPriceRepository.findByHotelAndDate(hotel, date)
@@ -84,15 +94,12 @@ public class PricingUpdateService {
             hotelPrices.add(hotelPrice);
         });
 
-        // Save all HotelPrice entities in bulk
         hotelMinPriceRepository.saveAll(hotelPrices);
     }
 
     private void updateInventoryPrices(List<Inventory> inventoryList) {
-        inventoryList.forEach(inventory -> {
-            BigDecimal dynamicPrice = pricingService.calculateDynamicPricing(inventory);
-            inventory.setPrice(dynamicPrice);
-        });
+        // Only `price` changes here; Inventory uses @DynamicUpdate so counts are never overwritten.
+        inventoryList.forEach(inventory -> inventory.setPrice(pricingService.calculateDynamicPricing(inventory)));
         inventoryRepository.saveAll(inventoryList);
     }
 }

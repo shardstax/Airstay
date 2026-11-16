@@ -7,6 +7,7 @@ import com.shardx.hotelManagement.airBnb.dto.UserDto;
 import com.shardx.hotelManagement.airBnb.service.BookingService;
 import com.shardx.hotelManagement.airBnb.service.GuestService;
 import com.shardx.hotelManagement.airBnb.service.UserService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,7 +25,7 @@ public class UserController {
     private final GuestService guestService;
 
     @PatchMapping("/profile")
-    public ResponseEntity<Void> updateProfile(@RequestBody ProfileUpdateRequestDto profileUpdateRequestDto) {
+    public ResponseEntity<Void> updateProfile(@Valid @RequestBody ProfileUpdateRequestDto profileUpdateRequestDto) {
         userService.updateProfile(profileUpdateRequestDto);
 
         return ResponseEntity.noContent().build();
@@ -46,12 +47,12 @@ public class UserController {
     }
 
     @PostMapping("/guests")
-    public ResponseEntity<GuestDto> addNewGuest(@RequestBody GuestDto guestDto) {
+    public ResponseEntity<GuestDto> addNewGuest(@Valid @RequestBody GuestDto guestDto) {
         return ResponseEntity.status(HttpStatus.CREATED).body(guestService.addNewGuest(guestDto));
     }
 
     @PutMapping("guests/{guestId}")
-    public ResponseEntity<Void> updateGuest(@PathVariable Long guestId, @RequestBody GuestDto guestDto) {
+    public ResponseEntity<Void> updateGuest(@PathVariable Long guestId, @Valid @RequestBody GuestDto guestDto) {
         guestService.updateGuest(guestId, guestDto);
         return ResponseEntity.noContent().build();
     }

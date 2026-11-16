@@ -3,6 +3,7 @@ package com.shardx.hotelManagement.airBnb.controller;
 import com.shardx.hotelManagement.airBnb.dto.InventoryDto;
 import com.shardx.hotelManagement.airBnb.dto.UpdateInventoryRequestDto;
 import com.shardx.hotelManagement.airBnb.service.InventoryService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -23,7 +24,7 @@ public class InventoryController {
 
     @PatchMapping("/rooms/{roomId}")
     public ResponseEntity<Void> updateInventory(@PathVariable Long roomId,
-                                                @RequestBody UpdateInventoryRequestDto updateInventoryRequestDto) {
+                                                @Valid @RequestBody UpdateInventoryRequestDto updateInventoryRequestDto) {
         inventoryService.updateInventory(roomId, updateInventoryRequestDto);
         return ResponseEntity.noContent().build();
     }

@@ -9,6 +9,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.Set;
 
 @Entity
@@ -28,7 +29,7 @@ public class Booking {
     private Hotel hotel;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name= "room_id", nullable = false)
+    @JoinColumn(name = "room_id", nullable = false)
     private Room room;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -38,9 +39,11 @@ public class Booking {
     @Column(nullable = false)
     private Integer roomsCount;
 
+    /** First night of the stay (inclusive). */
     @Column(nullable = false)
     private LocalDate checkInDate;
 
+    /** Departure day (exclusive): the guest does not stay this night. */
     @Column(nullable = false)
     private LocalDate checkOutDate;
 
@@ -60,7 +63,8 @@ public class Booking {
             joinColumns = @JoinColumn(name = "booking_id"),
             inverseJoinColumns = @JoinColumn(name = "guest_id")
     )
-    private Set<Guest> guests;
+    @Builder.Default
+    private Set<Guest> guests = new HashSet<>();
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
@@ -68,5 +72,11 @@ public class Booking {
     @Column(unique = true)
     private String paymentSessionId;
 
-}
+    /** When the inventory hold for an unpaid booking lapses. Not used once the booking is confirmed. */
+    private LocalDateTime expiresAt;
 
+    /** Last night of the stay, i.e. the last inventory date this booking occupies. */
+    public LocalDate getLastNight() {
+        return checkOutDate.minusDays(1);
+    }
+}

@@ -1,9 +1,11 @@
 package com.shardx.hotelManagement.airBnb.dto;
 
 import com.shardx.hotelManagement.airBnb.entity.enums.Gender;
+import com.shardx.hotelManagement.airBnb.entity.enums.Role;
 import lombok.Data;
 
 import java.time.LocalDate;
+import java.util.Set;
 
 @Data
 public class UserDto {
@@ -12,4 +14,5 @@ public class UserDto {
     private String name;
     private Gender gender;
     private LocalDate dateOfBirth;
+    private Set<Role> roles;
 }

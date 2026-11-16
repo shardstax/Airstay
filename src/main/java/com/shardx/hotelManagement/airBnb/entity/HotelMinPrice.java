@@ -15,6 +15,10 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @NoArgsConstructor
+@Table(uniqueConstraints = @UniqueConstraint(
+        name = "unique_hotel_min_price_date",
+        columnNames = {"hotel_id", "date"}
+))
 public class HotelMinPrice {
 
     @Id
@@ -29,7 +33,7 @@ public class HotelMinPrice {
     private LocalDate date;
 
     @Column(nullable = false, precision = 10, scale = 2)
-    private BigDecimal price; // min Price
+    private BigDecimal price; // lowest room price in the hotel for this date
 
     @CreationTimestamp
     private LocalDateTime createdAt;
