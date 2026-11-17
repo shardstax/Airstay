@@ -23,7 +23,7 @@ the response times), 20 s warm-up excluded from the percentiles, then 60 s measu
 | Overbooked nights / counters differing from the booking rows / negative counters | **0 / 0 / 0** |
 | `init` latency p50 / p95 / p99 | 257 ms / 645 ms / 876 ms |
 
-## 2. Mixed flow, arrival-rate ladder (20 hotels, 60 rooms types, stock 4 each)
+## 2. Mixed flow, arrival-rate ladder (20 hotels, 60 room types, stock 4 each)
 
 | New shoppers/s | Requests/s | search p95 | init p95 | webhook p95 | 5xx | Overbooking | Dropped iterations |
 |---:|---:|---:|---:|---:|---:|---:|---:|

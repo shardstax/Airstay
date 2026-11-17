@@ -157,6 +157,17 @@ before and after on the same data. Treat them as ratios, not as production laten
   (`booking.room_id`) was measured (7.7 ms against 0.05 ms at 200,000 bookings) and deliberately left alone.
 - Details, the method and the limits: [`load-tests/results/`](load-tests/results/phase5-activation-and-price-refresh.md).
 
+**Booking under load** (fake payment provider, one laptop, k6 on the same machine):
+
+- **No overbooking under contention:** 100 users fought for 35 rooms for the same two nights. Exactly 35 bookings were confirmed and the other
+  10,282 attempts got a clean 409, with no lock conflicts and no 5xx. PostgreSQL showed 0 oversold nights and inventory counters equal to the
+  booking rows; the same check passed after every mixed run.
+- **Realistic flow** (search, hold, guests, payment, webhook, confirm, some abandon or cancel): about 320 requests/s at 60 new shoppers/s with
+  p95 under 26 ms for every step and 0 errors. At 100/s latency rises (hold p95 0.35 to 1 s) and errors stay at 0.
+- **The connection pool was not shown to be the bottleneck:** 30 connections instead of 10 made no measurable difference, so it was left alone.
+- Not measured: real Stripe, several app instances, a separate load generator.
+  Details: [`load-tests/results/phase6-booking-load.md`](load-tests/results/phase6-booking-load.md).
+
 ## Running with Docker (recommended)
 
 Only Docker is required; the Java builds happen inside the images.

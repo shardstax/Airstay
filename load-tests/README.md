@@ -77,5 +77,35 @@ the machine (CPUs, memory, Docker) with a result: see `results/*.md`.
 - `results/baseline.md` and `results/with-cache.md`: search before and after the Redis cache.
 - `results/phase5-activation-and-price-refresh.md`: hotel activation and the hourly price refresh before and after, with
   statement counts and an index review.
+- `results/phase6-booking-load.md`: booking contention (zero overbooking), the throughput ladder and the connection-pool test.
 
 Each file says which data, machine and script it used, and what it does not show.
+
+## 6. Booking flow and the overbooking proof
+
+`booking-flow.js` drives the whole booking (search, hotel page, hold, guests, payment, signed webhook, confirm, some abandon,
+some cancel). `run-booking-load.sh` runs it, then checks PostgreSQL for overbooking and samples database activity and
+container CPU. It creates its own hotels and users through the API ("Load Hotel <run id> n") and needs:
+
+- **Fake payments and no rate limit**, otherwise you measure Stripe and the rate limiter, not the booking code:
+  `PAYMENTS_FAKE=true RATE_LIMIT_ENABLED=false docker compose up -d --build --wait app`
+  (the fake refuses to start with the `prod` profile). Use `--build`: a stale image silently keeps the real provider.
+- The webhook secret is read from the running app, so the signed events pass the real signature check.
+
+```bash
+bash load-tests/run-booking-load.sh contention VUS=100 USERS=100 DURATION=30s LABEL=contention    # one hot room, closed model
+bash load-tests/run-booking-load.sh mixed RATE=60 HOTELS=20 WARMUP=20s DURATION=60s LABEL=mixed-60 # realistic mix, open model
+# remove a run's hotels, bookings and users (the run id is printed at the end):
+docker compose exec -T postgres psql -U airstay -d airstay -v run=<RUN_ID> < load-tests/unload.sql
+```
+
+Variables (`KEY=value` after the mode): `RATE` new shoppers per second, `HOTELS`, `CITIES`, `ROOMS` room types per hotel, `STOCK`
+rooms per type, `DAYS` booking window, `USERS`, `ABANDON`, `CANCEL`, `WARMUP`, `DURATION`; contention only: `VUS`, `STOCKS`
+(rooms per type, comma separated). The script exits non-zero on any 5xx, unexpected answer, failed check or database violation.
+
+**The proof** is `verify-no-overbooking.sql`, run by the script: no night where booked plus reserved exceeds the rooms that
+exist, and the inventory counters equal what the booking rows imply (CONFIRMED is booked; RESERVED, GUESTS_ADDED and
+PAYMENTS_PENDING are reserved).
+
+Pitfalls: a JVM that has just restarted is slow for a minute under heavy load, so warm it or discard the first run; fixed stock
+drains faster at higher rates, so raise `HOTELS` with `RATE`; k6 shares the machine with the app, so treat numbers as relative.
