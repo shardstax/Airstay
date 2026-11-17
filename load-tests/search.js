@@ -31,6 +31,7 @@ export const options = {
     'http_req_duration{scenario:measured,endpoint:info}': ['p(95)>=0'],
     'http_reqs{scenario:measured,endpoint:search}': ['count>=0'],
     'http_reqs{scenario:measured,endpoint:info}': ['count>=0'],
+    'dropped_iterations{scenario:measured}': ['count>=0'],
   },
   summaryTrendStats: ['avg', 'min', 'med', 'p(90)', 'p(95)', 'p(99)', 'max'],
 };
@@ -92,7 +93,8 @@ export function handleSummary(data) {
       `${ms(d.med)} | ${ms(d['p(90)'])} | ${ms(d['p(95)'])} | ${ms(d['p(99)'])} | ${ms(d.max)}`);
   }
   const failed = find(data, 'http_req_failed', 'scenario:measured');
-  const dropped = data.metrics.dropped_iterations && data.metrics.dropped_iterations.values;
+  // Only the measured period: drops during the warm-up of a freshly started JVM are not a result.
+  const dropped = find(data, 'dropped_iterations', 'scenario:measured');
   lines.push(`failed requests: ${failed ? (failed.rate * 100).toFixed(2) + '%' : '-'}` +
     `   dropped iterations (system could not keep up): ${dropped ? dropped.count : 0}`);
   return {
