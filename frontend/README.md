@@ -9,15 +9,15 @@ Nothing needs installing on your machine: everything below runs in Docker. Open 
 
 ## Stack and why
 
-| Tool                                                              | Why                                                                      |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Vite + React 19 + TypeScript (strict, `noUncheckedIndexedAccess`) | fast builds, typed end to end                                            |
-| TanStack Query                                                    | server data: caching, retries, loading and error states                  |
-| `openapi-typescript` + `openapi-fetch`                            | request and response types **generated from the backend's OpenAPI spec** |
-| Tailwind CSS v4, design tokens in `src/index.css`                 | one calm blue, deep-navy text, quiet borders (Stripe-docs-like)          |
-| Vitest + Testing Library                                          | unit and component tests                                                 |
-| ESLint (strict, type-aware) + Prettier                            | enforced standards, see below                                            |
-| Self-hosted Inter font                                            | no third-party requests, so the CSP can stay `default-src 'self'`        |
+| Tool                                                              | Why                                                                         |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Vite + React 19 + TypeScript (strict, `noUncheckedIndexedAccess`) | fast builds, typed end to end                                               |
+| TanStack Query                                                    | server data: caching, retries, loading and error states                     |
+| `openapi-typescript` + `openapi-fetch`                            | request and response types **generated from the backend's OpenAPI spec**    |
+| Tailwind CSS v4, design tokens in `src/index.css`                 | Stripe blue (`#0570de`) as the single accent, deep-navy text, quiet borders |
+| Vitest + Testing Library                                          | unit and component tests                                                    |
+| ESLint (strict, type-aware) + Prettier                            | enforced standards, see below                                               |
+| Self-hosted Inter font                                            | no third-party requests, so the CSP can stay `default-src 'self'`           |
 
 TypeScript is pinned to 5.x: `openapi-typescript` needs the TypeScript 5 compiler API, which TypeScript 7 no longer provides.
 ESLint is pinned to 9 because `eslint-plugin-jsx-a11y` does not support 10 yet. Revisit both when those catch up.
