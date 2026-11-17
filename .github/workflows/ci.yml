@@ -54,18 +54,57 @@ jobs:
               target/site/jacoco/jacoco.csv | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
-  docker:
-    name: Docker image and compose smoke test
-    needs: build
+  notification-service:
+    name: Notification service build and test
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
 
-      # Builds the image and starts app + PostgreSQL; --wait fails the step unless both health checks pass.
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: notification-service/pom.xml
+
+      # A separate Maven project. Unit tests, then integration tests with Kafka and Redis in Docker (Testcontainers)
+      # and an in-process SMTP server. The contract test reads docs/events.md from the repository root.
+      - name: Build and verify
+        run: ./mvnw -B -ntp -f notification-service/pom.xml verify
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notification-service-test-reports
+          path: |
+            notification-service/target/surefire-reports
+            notification-service/target/failsafe-reports
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          if [ -f notification-service/target/site/jacoco/jacoco.csv ]; then
+            awk -F, 'NR>1 { missed+=$8; covered+=$9 } END { if (missed+covered>0) printf "Notification service line coverage: %.1f%%\n", 100*covered/(missed+covered) }' \
+              notification-service/target/site/jacoco/jacoco.csv | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+  docker:
+    name: Docker images and compose smoke test
+    needs: [build, notification-service]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Builds both images and starts PostgreSQL, Redis, Kafka, Mailpit, the app and the notification service;
+      # --wait fails the step unless every health check passes.
       - name: Start the stack
-        run: docker compose up --build --detach --wait --wait-timeout 300
+        run: docker compose up --build --detach --wait --wait-timeout 400
 
       - name: Smoke test the API
         run: |
@@ -76,11 +115,23 @@ jobs:
           curl -fsS -X POST "$B/auth/login" -H 'Content-Type: application/json' \
             -d '{"email":"ci@example.com","password":"Password123!"}' | grep -q accessToken
           test "$(curl -s -o /dev/null -w '%{http_code}' "$B/users/profile")" = "401"
-          echo "Image size: $(docker image inspect airstay:local --format '{{.Size}}' | numfmt --to=iec)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Image size (API): $(docker image inspect airstay:local --format '{{.Size}}' | numfmt --to=iec)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Image size (notification service): $(docker image inspect airstay-notification-service:local --format '{{.Size}}' | numfmt --to=iec)" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: App logs on failure
+      # The whole event chain with real components: a booking is confirmed by a signed Stripe webhook, goes through
+      # the outbox and Kafka to the notification service, and the e-mail shows up in Mailpit; then the same for a cancellation.
+      - name: Smoke test the event chain (webhook, outbox, Kafka, e-mail)
+        run: bash scripts/smoke-events.sh
+
+      - name: Logs on failure
         if: failure()
-        run: docker compose logs app
+        run: |
+          docker compose ps
+          for service in app notification-service kafka; do
+            echo "::group::$service"
+            docker compose logs --tail 200 "$service"
+            echo "::endgroup::"
+          done
 
       - name: Stop the stack
         if: always()
