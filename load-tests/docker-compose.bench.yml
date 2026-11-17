@@ -1,0 +1,17 @@
+# Only for measuring. Adds the pg_stat_statements extension to PostgreSQL so a load test can count the SQL statements an
+# operation really sends to the database (independent of the ORM), and how much database time they took.
+#
+#   docker compose -f docker-compose.yml -f load-tests/docker-compose.bench.yml up --build -d --wait
+#   bash load-tests/db-statements.sh enable      # once per database
+#
+# Not used in normal development or in CI.
+services:
+  postgres:
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=top
+      - -c
+      - track_activity_query_size=2048
