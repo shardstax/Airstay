@@ -1,8 +1,11 @@
 # End-to-end checks against the real stack
 
-Two browser scripts, both headless Playwright in Docker (nothing installed on your machine):
+Three browser scripts, all headless Playwright in Docker (nothing installed on your machine):
 
 - `stripe-real-flow.js`: payments with real Stripe (sandbox), described below.
+- `frontend-browse.js`: search, results with paging, the hotel page, sold-out and not-found states, and phone-width layout. It creates its
+  own hotels through the API first (12 in one city, plus a fully booked one). Run it exactly like `frontend-auth.js` below, replacing the
+  script name.
 - `frontend-auth.js`: the web app's sign-up, sign-in, session restore on reload and sign-out, against the running stack. Needs only
   `docker compose up --build` (no Stripe keys). Run (Git Bash on Windows needs `MSYS_NO_PATHCONV=1`):
 

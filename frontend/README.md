@@ -80,9 +80,20 @@ Every backend response is wrapped as `{ timeStamp, data, error }`, but the OpenA
 so a body that merely has a `data` field is left alone), so the types match what the code receives. Errors keep their body;
 `errorMessage()` turns one into readable text.
 
-Known limitation: the spec does not mark response fields as required, so the generated types make every field optional
-(`id?: number`) and the type check cannot yet prove a field is present. The backend can fix this by adding
-`@Schema(requiredMode = REQUIRED)` to its DTOs; that is planned before the screens that need it.
+The backend marks the fields it always returns as required in the spec (`@Schema(requiredMode = REQUIRED)`, pinned by a test in
+`AirStayApplicationIT`), so the generated types are exact: `price: number`, `photos?: string[]`. The few that stay optional are the read-only
+ids shared with request bodies (`HotelDto.id`, `GuestDto.id`) and Spring Data's `PagedModel`, whose fields are all optional.
+
+## Search and the URL
+
+A search and a hotel page keep everything in the URL (`/search?city=Pune&startDate=2026-12-20&endDate=2026-12-22&rooms=1&page=2`,
+`/hotels/7?startDate=...`), so links can be shared, the back button works and a reload keeps the search. The URL is read back through the
+same validation as the form (`parseStay`, `parseSearchParams`): an incomplete, hand-edited or outdated link asks for a new search instead of
+sending a bad request. Dates are plain `YYYY-MM-DD` strings and the arithmetic goes through UTC, so daylight-saving changes cannot move a
+day. While the next results page loads, the previous one stays visible (dimmed) instead of flashing empty.
+
+The rules a stay must obey (check-in not in the past, check-out after check-in, at most 30 nights, 1 to 10 rooms) mirror the backend's and
+live in `shared/lib/stay.ts`, so the form, the search page and the hotel page cannot disagree.
 
 ## Sign-in and the session
 
@@ -110,7 +121,7 @@ Known limitation: the spec does not mark response fields as required, so the gen
 
 ```
 src/app/        wiring: App (routes, layout), Header, NotFoundPage
-src/features/   one folder per product area: auth/ (sign in, sign up), account/, home/, design/ (the /design page)
-src/shared/     api/ (generated schema, typed client), session/ (token, refresh, route guards), ui/, lib/
+src/features/   one folder per product area: search/ (home, results), hotel/, auth/ (sign in, sign up), account/, design/ (/design)
+src/shared/     api/ (generated schema, typed client), session/ (token, refresh, route guards), ui/, lib/ (stay and date rules, formats)
 src/test/       test setup
 ```
