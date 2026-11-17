@@ -7,7 +7,6 @@ import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -25,7 +24,6 @@ class EventParserTest {
                 """);
 
         assertThat(event.eventId()).isEqualTo("e1");
-        assertThat(event.occurredAt()).isEqualTo(LocalDateTime.of(2026, 11, 17, 10, 0));
         assertThat(event.checkOutDate()).isEqualTo(LocalDate.of(2026, 12, 3));
         assertThat(event.amount()).isEqualByComparingTo("100.5");
     }
@@ -48,8 +46,50 @@ class EventParserTest {
     @NullSource
     @ValueSource(strings = {"", "   ", "not json", "{broken", "null", "[1,2,3]", "{\"type\":\"BOOKING_CONFIRMED\"}",
             "{\"eventId\":\"e1\"}", "{\"eventId\":\" \",\"type\":\"BOOKING_CONFIRMED\"}",
-            "{\"eventId\":\"e1\",\"type\":\"\"}", "{\"eventId\":\"e1\",\"type\":\"X\",\"bookingId\":\"abc\"}"})
+            "{\"eventId\":\"e1\",\"type\":\"\"}", "{\"eventId\":123,\"type\":\"BOOKING_CONFIRMED\"}",
+            "{\"eventId\":\"e1\",\"type\":\"BOOKING_CONFIRMED\",\"bookingId\":\"abc\"}"})
     void unreadableOrIncompleteMessagesAreMalformed(String payload) {
         assertThatThrownBy(() -> parser.parse(payload)).isInstanceOf(MalformedEventException.class);
+    }
+
+    @Test
+    void anUnknownTypeIsIgnoredEvenWhenItsOtherFieldsCannotBeRead() {
+        // A future event type may use any shape for its other fields; it must never be dead-lettered because of them.
+        BookingEvent event = parser.parse("""
+                {"eventId":"e1","type":"HOTEL_RENAMED","bookingId":"not a number","checkInDate":{"year":2027},
+                 "amount":[1,2],"roomsCount":"many"}
+                """);
+
+        assertThat(event.eventId()).isEqualTo("e1");
+        assertThat(event.type()).isEqualTo("HOTEL_RENAMED");
+    }
+
+    @Test
+    void aTimestampInAnotherFormatDoesNotBreakAnEvent() {
+        // occurredAt is not used by this service, so a change in its format (here: with a time zone) must not matter.
+        BookingEvent event = parser.parse("""
+                {"eventId":"e1","type":"BOOKING_CONFIRMED","occurredAt":"2026-11-17T10:00:00+05:30","bookingId":5,
+                 "userEmail":"a@b.test","hotelName":"H","roomType":"R","checkInDate":"2026-12-01",
+                 "checkOutDate":"2026-12-03","roomsCount":1,"amount":10}
+                """);
+
+        assertThat(event.bookingId()).isEqualTo(5L);
+    }
+
+    @Test
+    void errorMessagesNeverContainPartsOfThePayloadBecauseItHoldsAnEmailAddress() {
+        String secret = "secret.guest@example.test";
+        String truncated = "{\"eventId\":\"e1\",\"type\":\"BOOKING_CONFIRMED\",\"userEmail\":\"" + secret + "\",\"bookingId\"";
+        String badField = "{\"eventId\":\"e1\",\"type\":\"BOOKING_CONFIRMED\",\"userEmail\":\"" + secret
+                + "\",\"checkInDate\":\"not-a-date-" + secret + "\"}";
+
+        for (String payload : new String[]{truncated, badField}) {
+            assertThatThrownBy(() -> parser.parse(payload))
+                    .isInstanceOfSatisfying(MalformedEventException.class, e -> {
+                        assertThat(e.getMessage()).doesNotContain(secret).doesNotContain("secret");
+                        // The container logs the whole cause chain, so no Jackson exception may be kept as the cause.
+                        assertThat(e.getCause()).isNull();
+                    });
+        }
     }
 }

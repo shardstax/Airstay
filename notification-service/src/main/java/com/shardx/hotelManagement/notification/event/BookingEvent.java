@@ -13,11 +13,13 @@ import java.time.LocalDateTime;
  * <p>Fields the API adds later are ignored, so the API can evolve without breaking this service ("only ever add fields").
  * Wrapper types (Long, Integer) so that a missing field is {@code null} instead of a misleading 0.
  * {@code paymentSessionId} is not read: the contract says it is only ever set on refund requests, never on this topic.
+ * {@code occurredAt} is part of the contract but nothing here needs it, so it is deliberately not parsed: a change in
+ * its format (for example a time zone) must never be able to break e-mails.
  *
  * @param checkOutDate the departure day, not a night of the stay
  * @param amount       what the guest paid, in INR (the contract has no currency field yet)
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonIgnoreProperties(value = {"occurredAt"}, ignoreUnknown = true)
 public record BookingEvent(
         String eventId,
         String type,
