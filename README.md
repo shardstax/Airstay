@@ -167,7 +167,7 @@ before and after on the same data. Treat them as ratios, not as production laten
   could not start every shopper (36 to 203 dropped iterations), so that rate is past this laptop's comfortable limit.
 - **The connection pool was not shown to be the bottleneck:** between two cold-start runs, 30 connections instead of 10 made no
   measurable difference (single runs, so it is not proof), and it was left alone.
-- Not measured: real Stripe, several app instances, a separate load generator.
+- Not measured: several app instances, a separate load generator. The load runs use a fake payment provider; real Stripe was checked separately (see Testing).
   Details: [`load-tests/results/phase6-booking-load.md`](load-tests/results/phase6-booking-load.md).
 
 ## Running with Docker (recommended)
@@ -216,9 +216,15 @@ Flyway creates the schema on first start (`src/main/resources/db/migration`). Hi
 ./mvnw -f notification-service/pom.xml verify    # the notification service (needs Docker for Kafka and Redis)
 ```
 
-**205 automated tests**, all passing. The API has 144 (78 unit + 66 integration, **76.0%** line coverage) and the notification
+**213 automated tests**, all passing. The API has 152 (86 unit + 66 integration, **76.2%** line coverage) and the notification
 service has 61 (52 unit + 9 integration, **97.8%** line coverage). Coverage was measured with JaCoCo on 2026-11-17; re-measure
 before quoting it.
+
+**Real Stripe sandbox check (2026-11-17, scripted with Playwright, not part of the automated suite):** against the Docker stack with a Stripe
+test-mode key and the Stripe CLI forwarding real webhooks, a booking was paid on Stripe's hosted checkout with the test card 4242 4242 4242 4242
+(webhook verified, booking CONFIRMED), cancelled (a real refund of INR 4,000 succeeded through the Kafka refund worker, and the cancellation and
+refund e-mails arrived), a declined card (4000 0000 0000 0002) left the booking in PAYMENTS_PENDING, and expiring that checkout session released
+the booking as EXPIRED. Only test-mode keys were used. The scripts are not in the repository.
 
 - **Unit tests** (`*Test`, JUnit 5 + Mockito): every pricing rule and how they stack, JWT type and
   tamper checks, the booking state machine (holds, guests, payment, webhook idempotency, refunds

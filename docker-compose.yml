@@ -135,12 +135,12 @@ services:
   # Forwards Stripe test-mode webhooks to the app. Copy the "whsec_..." secret it prints into .env
   # as STRIPE_WEBHOOK_SECRET, then restart the app.
   stripe-cli:
-    image: stripe/stripe-cli:latest
+    image: stripe/stripe-cli:v1.55.11
     profiles: ["stripe"]
     depends_on:
       app:
         condition: service_healthy
-    command: ["listen", "--forward-to", "http://app:8080/api/v1/webhook/payment"]
+    command: ["listen", "--events", "checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.expired,checkout.session.async_payment_failed", "--forward-to", "http://app:8080/api/v1/webhook/payment"]
     environment:
       STRIPE_API_KEY: ${STRIPE_SECRET_KEY:-}
 
