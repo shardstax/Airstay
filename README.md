@@ -224,8 +224,8 @@ Flyway creates the schema on first start (`src/main/resources/db/migration`). Hi
 ./mvnw -f notification-service/pom.xml verify    # the notification service (needs Docker for Kafka and Redis)
 ```
 
-**213 automated tests**, all passing. The API has 152 (86 unit + 66 integration, **76.2%** line coverage) and the notification
-service has 61 (52 unit + 9 integration, **97.8%** line coverage). Coverage was measured with JaCoCo on 2026-11-17; re-measure
+**307 backend tests**, all passing. The API has 246 (162 unit + 84 integration, **80.5%** line coverage) and the notification
+service has 61 (52 unit + 9 integration, **97.8%** line coverage). Coverage was measured with JaCoCo on 2026-11-17; the frontend adds 406 Vitest tests. Re-measure
 before quoting it.
 
 **Real Stripe sandbox check (2026-11-17, Playwright script in `e2e/`, not part of the automated suite):** against the Docker stack with a Stripe
