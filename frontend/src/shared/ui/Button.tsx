@@ -2,17 +2,26 @@ import type { ButtonHTMLAttributes } from 'react';
 
 import { cn } from '@/shared/lib/cn';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
-const variants: Record<Variant, string> = {
+const variants: Record<ButtonVariant, string> = {
   primary: 'bg-brand-600 text-white hover:bg-brand-700 disabled:bg-brand-300',
   secondary: 'bg-white text-ink border border-line hover:bg-canvas disabled:text-ink-muted',
   ghost: 'text-brand-700 hover:bg-brand-50 disabled:text-ink-muted',
   danger: 'bg-danger text-white hover:opacity-90 disabled:opacity-50',
 };
 
+/** The look of a button, so a link can share it (see LinkButton). */
+export function buttonClasses(variant: ButtonVariant, className?: string): string {
+  return cn(
+    'inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed',
+    variants[variant],
+    className,
+  );
+}
+
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: Variant;
+  variant?: ButtonVariant;
   loading?: boolean;
 }
 
@@ -30,11 +39,7 @@ export function Button({
       type={type}
       disabled={loading || disabled === true}
       aria-busy={loading || undefined}
-      className={cn(
-        'inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed',
-        variants[variant],
-        className,
-      )}
+      className={buttonClasses(variant, className)}
       {...rest}
     >
       {loading && (

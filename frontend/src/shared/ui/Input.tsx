@@ -1,6 +1,6 @@
-import { type InputHTMLAttributes, useId } from 'react';
+import type { InputHTMLAttributes } from 'react';
 
-import { cn } from '@/shared/lib/cn';
+import { Field } from './Field';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -8,36 +8,11 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   hint?: string;
 }
 
-/** A labelled text field. The label, hint and error are wired to the input for screen readers. */
+/** A labelled text field (also used for dates). */
 export function Input({ label, error, hint, className, id, ...rest }: InputProps) {
-  const generated = useId();
-  const inputId = id ?? generated;
-  const describedBy = error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined;
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={inputId} className="text-sm font-medium text-ink">
-        {label}
-      </label>
-      <input
-        id={inputId}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy}
-        className={cn(
-          'h-10 rounded-lg border bg-white px-3 text-sm text-ink placeholder:text-ink-muted',
-          error ? 'border-danger' : 'border-line hover:border-ink-muted',
-          className,
-        )}
-        {...rest}
-      />
-      {error ? (
-        <p id={`${inputId}-error`} role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : hint ? (
-        <p id={`${inputId}-hint`} className="text-sm text-ink-muted">
-          {hint}
-        </p>
-      ) : null}
-    </div>
+    <Field label={label} error={error} hint={hint} id={id} className={className}>
+      {(control) => <input {...control} {...rest} />}
+    </Field>
   );
 }

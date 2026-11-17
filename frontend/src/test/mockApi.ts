@@ -16,6 +16,8 @@ export interface RecordedCall {
   key: string;
   authorization: string | null;
   body: unknown;
+  /** The query string, e.g. `city=Pune&page=0`. */
+  query: URLSearchParams;
 }
 
 /**
@@ -35,6 +37,7 @@ export function mockApi(routes: Record<string, Handler>) {
     calls.push({
       key,
       authorization: request.headers.get('authorization'),
+      query: new URL(request.url).searchParams,
       body: text ? (JSON.parse(text) as unknown) : undefined,
     });
 
