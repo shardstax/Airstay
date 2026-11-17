@@ -125,13 +125,14 @@ export function HotelForm({ catalog, initial, onSaved, onCancel }: HotelFormProp
 
       <Card className="grid gap-4 sm:grid-cols-2">
         <h2 className="text-lg font-semibold text-ink sm:col-span-2">Contact details</h2>
-        <Input
-          label="Address (optional)"
-          autoComplete="street-address"
-          error={errors.address?.message}
-          className="sm:col-span-2"
-          {...register('address')}
-        />
+        <div className="sm:col-span-2">
+          <Input
+            label="Address (optional)"
+            autoComplete="street-address"
+            error={errors.address?.message}
+            {...register('address')}
+          />
+        </div>
         <Input
           label="Phone (optional)"
           type="tel"

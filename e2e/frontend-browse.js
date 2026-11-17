@@ -42,8 +42,15 @@ async function signUp(email, name, accountType) {
   return r.json.data.accessToken;
 }
 
-async function createHotel(manager, name, city, rooms, amenities) {
-  let r = await api('POST', '/admin/hotels', manager, { name, city, amenities });
+// With the synthetic place provider, searching for any text returns one place named after it (with an id of its own).
+async function placeFor(text) {
+  const r = await api('GET', `/places?query=${encodeURIComponent(text)}`);
+  if (r.status !== 200 || !r.json.data.length) throw new Error(`no place for ${text}: ${r.status} ${r.text} (is the stack running with PLACES_PROVIDER=synthetic?)`);
+  return r.json.data[0];
+}
+
+async function createHotel(manager, name, place, rooms, amenities) {
+  let r = await api('POST', '/admin/hotels', manager, { name, placeId: place.id, amenities });
   if (r.status !== 201) throw new Error(`create hotel failed: ${r.status} ${r.text}`);
   const hotelId = r.json.data.id;
   const roomIds = [];
@@ -59,7 +66,9 @@ async function createHotel(manager, name, city, rooms, amenities) {
 
 (async () => {
   const id = Date.now();
-  const city = `Browse${id}`;
+  const placeQuery = `Browse${id}`;
+  const place = await placeFor(placeQuery);
+  const city = place.label; // what the server stores and search matches on
   const startDate = day(30);
   const endDate = day(32);
 
@@ -71,7 +80,7 @@ async function createHotel(manager, name, city, rooms, amenities) {
     await createHotel(
       manager,
       `Browse Hotel ${String(i).padStart(2, '0')}`,
-      city,
+      place,
       [
         { type: 'Standard', basePrice: 1500 + i * 100, totalCount: 3 },
         { type: 'Suite', basePrice: 3000 + i * 100, totalCount: 2 },
@@ -79,8 +88,9 @@ async function createHotel(manager, name, city, rooms, amenities) {
       amenityPool.slice(0, 1 + (i % 6)),
     );
   }
-  const soldOutCity = `SoldOut${id}`;
-  const soldOut = await createHotel(manager, 'Fully Booked Inn', soldOutCity, [{ type: 'Only Room', basePrice: 2000, totalCount: 1 }], ['WiFi']);
+  const soldOutPlace = await placeFor(`SoldOut${id}`);
+  const soldOutCity = soldOutPlace.label;
+  const soldOut = await createHotel(manager, 'Fully Booked Inn', soldOutPlace, [{ type: 'Standard', basePrice: 2000, totalCount: 1 }], ['WiFi']);
   const guestId = (await api('POST', '/users/guests', guest, { name: 'Browse Traveller' })).json.data.id;
   void guestId;
   const hold = await api('POST', '/bookings/init', guest, {
@@ -104,8 +114,9 @@ async function createHotel(manager, name, city, rooms, amenities) {
   await page.getByRole('heading', { name: 'Find a place to stay.' }).waitFor();
   await page.screenshot({ path: `${OUT}/browse-home.png` });
   await page.getByRole('button', { name: 'Search' }).click();
-  step(await page.getByText('Enter a city.').isVisible(), 'searching without a city shows a validation message');
-  await page.getByLabel('City').fill(city);
+  step(await page.getByText('Choose a place from the list.').isVisible(), 'searching without choosing a place shows a validation message');
+  await page.getByRole('combobox', { name: 'City' }).fill(placeQuery);
+  await page.getByRole('option', { name: city }).click();
   await page.getByLabel('Check-in').fill(startDate);
   await page.getByLabel('Check-out').fill(endDate);
   await page.getByRole('button', { name: 'Search' }).click();
@@ -135,7 +146,7 @@ async function createHotel(manager, name, city, rooms, amenities) {
   // 3. A reload keeps the search (deep link).
   await page.reload();
   await page.getByText('12 hotels found').waitFor();
-  step((await page.getByLabel('City').inputValue()) === city, 'reloading the results page keeps the search');
+  step((await page.getByRole('combobox', { name: 'City' }).inputValue()) === city, 'reloading the results page keeps the search');
 
   // 4. Open a hotel.
   await page.getByRole('link', { name: 'Browse Hotel 03' }).first().click();
@@ -160,12 +171,12 @@ async function createHotel(manager, name, city, rooms, amenities) {
   await page.goto(`${ORIGIN}/hotels/${soldOut.hotelId}?startDate=${startDate}&endDate=${endDate}&rooms=1`);
   await page.getByRole('heading', { name: 'No rooms available for these dates' }).waitFor();
   step(true, 'a fully booked hotel says no rooms are available for those dates');
-  await page.goto(`${ORIGIN}/search?city=${soldOutCity}&startDate=${startDate}&endDate=${endDate}&rooms=1`);
+  await page.goto(`${ORIGIN}/search?city=${encodeURIComponent(soldOutCity)}&startDate=${startDate}&endDate=${endDate}&rooms=1`);
   await page.getByRole('heading', { name: 'No hotels available for these dates' }).waitFor();
   step(true, 'and it is left out of the search results');
 
   // 6. Unknown things.
-  await page.goto(`${ORIGIN}/search?city=Nowhereville${id}&startDate=${startDate}&endDate=${endDate}`);
+  await page.goto(`${ORIGIN}/search?city=${encodeURIComponent(`Nowhereville${id}`)}&startDate=${startDate}&endDate=${endDate}`);
   await page.getByRole('heading', { name: 'No hotels available for these dates' }).waitFor();
   step(true, 'a city with no hotels shows the empty state');
   await page.goto(`${ORIGIN}/hotels/999999999?startDate=${startDate}&endDate=${endDate}&rooms=1`);
@@ -179,7 +190,7 @@ async function createHotel(manager, name, city, rooms, amenities) {
   await page.setViewportSize({ width: 390, height: 800 });
   for (const [name, path] of [
     ['home', '/'],
-    ['results', `/search?city=${city}&startDate=${startDate}&endDate=${endDate}&rooms=1`],
+    ['results', `/search?city=${encodeURIComponent(city)}&startDate=${startDate}&endDate=${endDate}&rooms=1`],
     ['hotel', `/hotels/${soldOut.hotelId}?startDate=${startDate}&endDate=${endDate}&rooms=1`],
   ]) {
     await page.goto(ORIGIN + path);
@@ -187,7 +198,7 @@ async function createHotel(manager, name, city, rooms, amenities) {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
     step(!overflow, `no horizontal scrolling on the ${name} page at 390px wide`);
   }
-  await page.goto(`${ORIGIN}/search?city=${city}&startDate=${startDate}&endDate=${endDate}&rooms=1`);
+  await page.goto(`${ORIGIN}/search?city=${encodeURIComponent(city)}&startDate=${startDate}&endDate=${endDate}&rooms=1`);
   await page.getByText('12 hotels found').waitFor();
   await page.screenshot({ path: `${OUT}/browse-mobile.png` });
 

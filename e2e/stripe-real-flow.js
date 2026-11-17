@@ -77,7 +77,7 @@ async function payOnCheckout(page, url, card) {
   const id = Date.now();
   const manager = await signup(`e2e-mgr-${id}@example.test`, 'E2E Manager', 'HOTEL_MANAGER');
   const user = await signup(`e2e-user-${id}@example.test`, 'E2E Guest');
-  let r = await api('POST', '/admin/hotels', manager, { name: `E2E Stripe Hotel ${id}`, city: `E2ECity${id}` });
+  let r = await api('POST', '/admin/hotels', manager, { name: `E2E Stripe Hotel ${id}`, placeId: 1259229 });
   const hotelId = r.json.data.id;
   r = await api('POST', `/admin/hotels/${hotelId}/rooms`, manager, { type: 'Deluxe', basePrice: 2000, totalCount: 3, capacity: 2 });
   const roomId = r.json.data.id;
