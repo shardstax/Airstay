@@ -8,6 +8,8 @@ import com.shardx.hotelManagement.airBnb.entity.enums.BookingStatus;
 import com.shardx.hotelManagement.airBnb.exception.BadRequestException;
 import com.shardx.hotelManagement.airBnb.exception.ConflictException;
 import com.shardx.hotelManagement.airBnb.exception.ResourceNotFoundException;
+import com.shardx.hotelManagement.airBnb.events.BookingEventType;
+import com.shardx.hotelManagement.airBnb.events.OutboxService;
 import com.shardx.hotelManagement.airBnb.exception.UnAuthorisedException;
 import com.shardx.hotelManagement.airBnb.repository.*;
 import com.shardx.hotelManagement.airBnb.strategy.PricingService;
@@ -63,6 +65,7 @@ public class BookingServiceImpl implements BookingService {
     private final PricingService pricingService;
     private final Clock clock;
     private final IdempotencyKeyRepository idempotencyKeyRepository;
+    private final OutboxService outboxService;
 
     @Value("${frontend.url}")
     private String frontendUrl;
@@ -264,6 +267,7 @@ public class BookingServiceImpl implements BookingService {
                 }
                 booking.setBookingStatus(BookingStatus.CONFIRMED);
                 bookingRepository.save(booking);
+                outboxService.record(BookingEventType.BOOKING_CONFIRMED, booking); // same transaction as the status change
                 log.info("Successfully confirmed the booking for Booking ID: {}", booking.getId());
             }
             default -> {
@@ -304,6 +308,7 @@ public class BookingServiceImpl implements BookingService {
 
         booking.setBookingStatus(BookingStatus.CANCELLED);
         bookingRepository.save(booking);
+        outboxService.record(BookingEventType.BOOKING_CANCELLED, booking);
         refundAfterCommit(booking);
     }
 
@@ -401,6 +406,7 @@ public class BookingServiceImpl implements BookingService {
         }
         booking.setBookingStatus(BookingStatus.EXPIRED);
         bookingRepository.save(booking);
+        outboxService.record(BookingEventType.BOOKING_EXPIRED, booking);
         log.info("Booking {} expired and its held rooms were released", booking.getId());
     }
 

@@ -6,6 +6,8 @@ import com.shardx.hotelManagement.airBnb.dto.BookingRequest;
 import com.shardx.hotelManagement.airBnb.entity.*;
 import com.shardx.hotelManagement.airBnb.entity.enums.BookingStatus;
 import com.shardx.hotelManagement.airBnb.entity.enums.Role;
+import com.shardx.hotelManagement.airBnb.events.BookingEventType;
+import com.shardx.hotelManagement.airBnb.events.OutboxService;
 import com.shardx.hotelManagement.airBnb.exception.BadRequestException;
 import com.shardx.hotelManagement.airBnb.exception.ConflictException;
 import com.shardx.hotelManagement.airBnb.exception.UnAuthorisedException;
@@ -61,6 +63,7 @@ class BookingServiceImplTest {
     @Mock private InventoryRepository inventoryRepository;
     @Mock private CheckoutService checkoutService;
     @Mock private IdempotencyKeyRepository idempotencyKeyRepository;
+    @Mock private OutboxService outboxService;
 
     private BookingServiceImpl bookingService;
     private User user;
@@ -71,7 +74,7 @@ class BookingServiceImplTest {
     void setUp() {
         bookingService = new BookingServiceImpl(guestRepository, new MapperConfig().modelMapper(), bookingRepository,
                 hotelRepository, roomRepository, inventoryRepository, checkoutService,
-                new PricingService("", CLOCK), CLOCK, idempotencyKeyRepository);
+                new PricingService("", CLOCK), CLOCK, idempotencyKeyRepository, outboxService);
         ReflectionTestUtils.setField(bookingService, "frontendUrl", "http://localhost:5173");
         ReflectionTestUtils.setField(bookingService, "reservationHoldMinutes", 10L);
         ReflectionTestUtils.setField(bookingService, "paymentHoldMinutes", 35L);
@@ -356,6 +359,7 @@ class BookingServiceImplTest {
             bookingService.capturePayment(event("checkout.session.completed", "paid"));
 
             assertThat(booking.getBookingStatus()).isEqualTo(BookingStatus.CONFIRMED);
+            verify(outboxService).record(BookingEventType.BOOKING_CONFIRMED, booking); // saved with the status change
         }
 
         @Test
@@ -368,6 +372,7 @@ class BookingServiceImplTest {
             verify(inventoryRepository, never()).confirmBooking(anyLong(), any(), any(), anyInt());
             verify(bookingRepository, never()).save(any());
             assertThat(booking.getBookingStatus()).isEqualTo(BookingStatus.CONFIRMED);
+            verifyNoInteractions(outboxService); // a duplicate webhook must not produce a second event
         }
 
         @Test
@@ -400,6 +405,7 @@ class BookingServiceImplTest {
             bookingService.capturePayment(event("checkout.session.expired", "unpaid"));
 
             assertThat(booking.getBookingStatus()).isEqualTo(BookingStatus.EXPIRED);
+            verify(outboxService).record(BookingEventType.BOOKING_EXPIRED, booking);
         }
     }
 
@@ -415,6 +421,7 @@ class BookingServiceImplTest {
             bookingService.expireBooking(BOOKING_ID);
 
             assertThat(booking.getBookingStatus()).isEqualTo(BookingStatus.EXPIRED);
+            verify(outboxService).record(BookingEventType.BOOKING_EXPIRED, booking);
         }
 
         @Test
@@ -426,6 +433,7 @@ class BookingServiceImplTest {
 
             verify(inventoryRepository, never()).releaseReservation(anyLong(), any(), any(), anyInt());
             assertThat(booking.getBookingStatus()).isEqualTo(BookingStatus.PAYMENTS_PENDING);
+            verifyNoInteractions(outboxService);
         }
 
         @Test
@@ -435,7 +443,7 @@ class BookingServiceImplTest {
 
             bookingService.expireBooking(BOOKING_ID);
 
-            verifyNoInteractions(inventoryRepository);
+            verifyNoInteractions(inventoryRepository, outboxService);
         }
     }
 
@@ -452,6 +460,7 @@ class BookingServiceImplTest {
             bookingService.cancelBooking(BOOKING_ID);
 
             assertThat(booking.getBookingStatus()).isEqualTo(BookingStatus.CANCELLED);
+            verify(outboxService).record(BookingEventType.BOOKING_CANCELLED, booking);
             verify(checkoutService, never()).refund(any(), any());
             runAfterCommitCallbacks();
             verify(checkoutService).refund(SESSION_ID, BOOKING_ID);
@@ -465,7 +474,7 @@ class BookingServiceImplTest {
 
             assertThatThrownBy(() -> bookingService.cancelBooking(BOOKING_ID))
                     .isInstanceOf(ConflictException.class);
-            verifyNoInteractions(inventoryRepository, checkoutService);
+            verifyNoInteractions(inventoryRepository, checkoutService, outboxService);
         }
 
         @Test
@@ -476,7 +485,7 @@ class BookingServiceImplTest {
 
             assertThatThrownBy(() -> bookingService.cancelBooking(BOOKING_ID))
                     .isInstanceOf(UnAuthorisedException.class);
-            verifyNoInteractions(inventoryRepository, checkoutService);
+            verifyNoInteractions(inventoryRepository, checkoutService, outboxService);
         }
     }
 
