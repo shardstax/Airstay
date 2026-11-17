@@ -74,5 +74,8 @@ the machine (CPUs, memory, Docker) with a result: see `results/*.md`.
 
 ## 5. Recorded results
 
-See `results/baseline.md` (before any caching) and later files for each optimisation, measured on the same data with
-the same script.
+- `results/baseline.md` and `results/with-cache.md`: search before and after the Redis cache.
+- `results/phase5-activation-and-price-refresh.md`: hotel activation and the hourly price refresh before and after, with
+  statement counts and an index review.
+
+Each file says which data, machine and script it used, and what it does not show.
