@@ -18,9 +18,13 @@ default JVM settings (a container-aware heap), Redis and Kafka running. Data: th
   run every minute with `PRICING_REFRESH_CRON`; **run 2 is steady state** (the first run after a restart also pays JVM warm-up).
 - **Statements:** PostgreSQL's `pg_stat_statements` (top-level statements only, so PostgreSQL's own foreign-key checks are not
   counted), reset right before the operation. For the refresh, counters were reset right after run 1 finished and read right after
-  run 2 finished. The outbox relay's background polling is excluded. A statement count includes `BEGIN` and `COMMIT`.
-- **Activation statements** also include creating the benchmark hotel and its rooms (about 5 to 8 statements per run), which is
-  why the "after" count is not zero-based.
+  run 2 finished. The outbox relay's polling queries are excluded, **but its `BEGIN` statements cannot be told apart and are
+  counted**: about 120 of the 454 `BEGIN`s in a refresh run are background transactions, so "statements per hotel" slightly
+  overstates the refresh's own work.
+- **Activation statements** also include creating the benchmark hotel and its rooms and the authentication lookups of each
+  request, roughly half of the "after" count.
+- **Run-to-run variation is real.** The activation median for 4 room types was 108, 124 and 112 ms in three runs on slightly
+  different versions of the code (all after the change). Treat differences of 10 to 15% as noise.
 
 ## What was slow
 
@@ -33,10 +37,14 @@ default JVM settings (a container-aware heap), Redis and Kafka running. Data: th
 ## What changed
 
 1. Activation creates a room's nights with one `INSERT ... SELECT generate_series(...)`.
-2. The refresh pages hotel ids only; reads a hotel's nights with their rooms in one query; computes prices in memory; locks the rows
-   that change in id order (the same lock order the booking code uses, so refresh and bookings cannot deadlock); updates them with one
-   `UPDATE ... FROM unnest(...)`; and upserts the "from" prices with one `INSERT ... ON CONFLICT DO UPDATE ... WHERE price <> ...`.
-   Both writes touch only rows whose price changed, so a refresh in which nothing changed writes nothing.
+2. The refresh pages hotel ids only; takes a per-hotel advisory lock; reads a hotel's nights with their rooms in one query;
+   computes prices in memory; locks the rows that change in id order and updates them with one `UPDATE ... FROM unnest(...)`; and
+   upserts the "from" prices with one `INSERT ... ON CONFLICT DO UPDATE ... WHERE price <> ...`. Both writes touch only rows whose
+   price changed, so a refresh in which nothing changed writes nothing.
+3. Concurrency rules (found in review): two refreshes of one hotel are serialized by the advisory lock (the slower one reads what
+   the first wrote); rows are locked in id order, the order bookings use for a room, so a refresh cannot deadlock with a booking;
+   and owner changes (surge factor, a room's price or count, deleting a room) refresh only **after their own transaction
+   commits**, so no transaction holds room locks while waiting for the refresh's.
 
 ## Results
 
@@ -45,11 +53,11 @@ default JVM settings (a container-aware heap), Redis and Kafka running. Data: th
 | Room types | | Median | p95 | min / max | Statements per activation |
 |---|---|---|---|---|
 | 4 | before | 1,008 ms | 1,821 ms | 827 / 2,550 ms | 2,282 (34,233 for 15 runs) |
-| 4 | **after** | **124 ms** | **240 ms** | 97 / 331 ms | **39** (589 for 15 runs) |
+| 4 | **after** | **112 ms** | **181 ms** | 95 / 251 ms | **40** (603 for 15 runs) |
 | 1 | before | 393 ms | 462 ms | 308 / 482 ms | 1,128 (16,927 for 15 runs) |
-| 1 | **after** | **44 ms** | **54 ms** | 39 / 58 ms | **21** (312 for 15 runs) |
+| 1 | **after** | **51 ms** | **78 ms** | 39 / 97 ms | **22** (327 for 15 runs) |
 
-Median **8.1 times** faster for 4 room types (8.9 times for 1); statements **58 times** fewer (54 times). The 21,960 INSERTs of
+Median **9.0 times** faster for 4 room types (7.7 times for 1); statements **57 times** fewer (52 times). The 21,960 INSERTs of
 the "before" run for 4 room types are exactly 15 x 4 x 366: one per night per room.
 
 ### The hourly price refresh (337 hotels, 469,212 inventory rows)
@@ -57,35 +65,46 @@ the "before" run for 4 room types are exactly 15 x 4 x 366: one per night per ro
 | | Time | Statements | Statements per hotel |
 |---|---|---|---|
 | Before, steady state (run 2) | 111,564 ms | 125,621 | 373 |
-| **After, steady state (run 2)** | **5,785 ms** | **1,133** | **3.4** |
+| **After, steady state (run 2)** | **5,961 ms** | **1,470** | **4.4** |
 | Before, first run after a restart | 149,135 ms | not counted | not comparable (see below) |
-| After, first run after a restart | 6,884 ms | not counted | not comparable (see below) |
-| **After, stress: every price overwritten with 1.00 first** | 11,347 ms | 1,817 | 5.4 |
+| After, first run after a restart | 6,673 ms | not counted | not comparable (see below) |
+| **After, stress: every price overwritten with 1.00 first** | 11,221 ms | 2,157 | 6.4 |
 
-Steady state is **19.3 times** faster with **111 times** fewer statements. In the stress run the job had to rewrite all 469,212
-prices (one lock statement and one update per hotel) and still finished in 11.3 s; afterwards no price was left at 1.00. The
+Steady state is **18.7 times** faster with **85 times** fewer statements. The refresh's own statements are now three per hotel (the
+advisory lock, one read, one "from" price upsert) plus transaction control. In the stress run the job had to rewrite all 469,212
+prices (one more lock statement and one update per hotel) and still finished in 11.2 s; afterwards no price was left at 1.00. The
 "before" stress case was not measured.
 
-The most frequent statements, steady state after: 337 reads of a hotel's nights (1.5 s of database time) and 337 "from" price
-upserts that wrote no row (1.9 s), plus transaction control. Before: 123,342 single-night "from" price lookups (2.8 s of database time).
+The most frequent statements, steady state after: 337 reads of a hotel's nights (1.7 s of database time) and 337 "from" price
+upserts that wrote no row (1.9 s), 337 advisory locks (about 0 s), plus transaction control. Before: 123,342 single-night "from"
+price lookups (2.8 s of database time).
 
 ## What these numbers do and do not say
 
-- **Database time did not change** (3.6 s before, 3.5 s after for the refresh): the saving is **round trips between the
-  application and the database** and the ORM work around them (125,000 statements became 1,100), not faster SQL.
+- **Database time did not change** (3.6 s before, 3.6 s after for the refresh): the saving is **round trips between the
+  application and the database** and the ORM work around them (125,000 statements became 1,500), not faster SQL.
 - The activation and refresh numbers are from one laptop. Treat them as a ratio, not as production latency.
-- **Neither operation is on a user's request path.** Activation is a rare manager action (about 1 s became about 0.1 s) and the
-  refresh runs in the background once an hour. The benefit is much less database and CPU load, and a refresh whose duration grows
-  slowly with the number of hotels. As a **linear extrapolation, not a measurement**: before, about 0.33 s per hotel would put a
-  10,000-hotel catalogue at roughly 55 minutes per hourly run; after, about 17 ms per hotel is roughly 3 minutes.
+- **Where they matter.** The hourly refresh runs in the background, so no user waits for it; what improves is database and CPU
+  load and how the job's duration grows with the number of hotels. As a **linear extrapolation, not a measurement**: before, about
+  0.33 s per hotel would put a 10,000-hotel catalogue at roughly 55 minutes per hourly run; after, about 18 ms per hotel is roughly
+  3 minutes. **Activation and owner changes do wait for a refresh**: they run it inside the owner's request (activation and adding a
+  room before the response, surge and room changes right after the owner's transaction commits), so those requests got about 9
+  times faster. They are rare manager actions, not a hot path.
 - The "first run after a restart" rows are not a clean comparison: the "before" run started from freshly seeded prices (many
   rows to write) while the "after" run started from prices already settled by earlier runs. Only steady state is compared.
-- Prices must not change: the pricing integration tests check the rules (surge, occupancy, last-minute, "from" price = cheapest
-  room), that only changed rows are written and that a second refresh writes nothing.
+- **No old-versus-new equivalence test exists.** The old refresh was replaced, not run alongside. Confidence that prices did not
+  change rests on tests of hand-picked cases: the pricing rules (surge, occupancy, last-minute), "from" price = cheapest room, only
+  changed rows rewritten (judged by PostgreSQL's row version), a second refresh rewriting nothing, a scheduled run across several
+  pages that repairs corrupted nightly and "from" prices and skips hotels without inventory, and owner changes being visible when
+  their request returns.
+- **Known limits.** No lock timeout is set: a refresh waiting for a row lock waits as long as that transaction runs (booking
+  transactions are short). If a refresh started after an owner's change fails, the change stays committed and the hourly refresh
+  corrects the prices. A refresh paged by id offset can skip a hotel that is deleted while it runs; the next run covers it.
 
 ## Indexes: checked, nothing to add
 
-`EXPLAIN (ANALYZE, BUFFERS)` on the same data (496,662 inventory rows, 134,322 "from" prices), hot paths:
+`EXPLAIN (ANALYZE, BUFFERS)` on the same data, measured after the activation benchmark had added 30 more hotels (so 496,662
+inventory rows and 134,322 "from" prices, not the 469,212 above), hot paths:
 
 | Query | Plan | Execution time |
 |---|---|---|
