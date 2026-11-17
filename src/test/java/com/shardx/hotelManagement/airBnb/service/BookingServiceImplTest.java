@@ -124,7 +124,8 @@ class BookingServiceImplTest {
             // 2 nights x 1000 x 2 rooms; the check-out day is not charged
             assertThat(result.getAmount()).isEqualByComparingTo("4000.00");
             assertThat(result.getBookingStatus()).isEqualTo(BookingStatus.RESERVED);
-            assertThat(result.getExpiresAt()).isEqualTo(NOW.plusMinutes(10));
+            // The API sends the end of the hold as a UTC instant, so a client in any time zone computes the same countdown.
+            assertThat(result.getExpiresAt()).isEqualTo(Instant.parse("2026-06-01T10:10:00Z"));
             assertThat(result.getHotelId()).isEqualTo(10L);
             assertThat(result.getRoomId()).isEqualTo(ROOM_ID);
         }

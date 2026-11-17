@@ -327,15 +327,25 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional(readOnly = true)
+    public BookingDto getBooking(Long bookingId) {
+        return toDto(findOwnedBooking(bookingId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public BookingStatus getBookingStatus(Long bookingId) {
+        return findOwnedBooking(bookingId).getBookingStatus();
+    }
+
+    /** Read-only lookup of one of the caller's own bookings (see lockOwnedBooking for the locking variant). */
+    private Booking findOwnedBooking(Long bookingId) {
         Booking booking = bookingRepository.findById(bookingId).orElseThrow(
-                () -> new ResourceNotFoundException("Booking not found with id: " + bookingId)
-        );
+                () -> new ResourceNotFoundException("Booking not found with id: " + bookingId));
         User user = getCurrentUser();
         if (!user.equals(booking.getUser())) {
             throw new UnAuthorisedException("Booking does not belong to this user with id: " + user.getId());
         }
-        return booking.getBookingStatus();
+        return booking;
     }
 
     @Override
@@ -471,7 +481,17 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private BookingDto toDto(Booking booking) {
-        return modelMapper.map(booking, BookingDto.class);
+        BookingDto dto = modelMapper.map(booking, BookingDto.class);
+        dto.setCreatedAt(toInstant(booking.getCreatedAt()));
+        dto.setUpdatedAt(toInstant(booking.getUpdatedAt()));
+        dto.setExpiresAt(toInstant(booking.getExpiresAt()));
+        dto.setMaxGuests(booking.getRoom().getCapacity() * booking.getRoomsCount());
+        return dto;
+    }
+
+    /** The entity stores local times in the server's zone; the API sends instants so every client reads them the same way. */
+    private Instant toInstant(LocalDateTime localTime) {
+        return localTime == null ? null : localTime.atZone(clock.getZone()).toInstant();
     }
 
     private static Session extractSession(Event event) {

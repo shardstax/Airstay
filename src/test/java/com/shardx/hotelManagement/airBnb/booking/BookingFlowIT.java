@@ -88,6 +88,49 @@ class BookingFlowIT extends IntegrationTestBase {
         verify(checkoutService, timeout(20_000).times(1)).refund(sessionId, bookingId);
     }
 
+    /**
+     * The web app shows a booking by id and needs the hotel name and room type to describe it, so the booking carries both
+     * and a guest can read only their own.
+     */
+    @Test
+    void aGuestCanReadTheirOwnBookingWithHotelNameAndRoomTypeButNobodyElse() {
+        TestHotel hotel = createActiveHotel(newManagerToken(), 2, "1000.00");
+        String guest = newGuestToken();
+        ResponseEntity<JsonNode> init = initBooking(guest, hotel, checkIn, checkOut, 1);
+        long bookingId = data(init).path("id").asLong();
+
+        assertThat(data(init).path("hotelName").asText()).isEqualTo("Test Hotel");
+        assertThat(data(init).path("roomType").asText()).isEqualTo("Deluxe");
+
+        ResponseEntity<JsonNode> own = get("/bookings/" + bookingId, guest);
+        assertThat(own.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(data(own).path("id").asLong()).isEqualTo(bookingId);
+        assertThat(data(own).path("hotelName").asText()).isEqualTo("Test Hotel");
+        assertThat(data(own).path("roomType").asText()).isEqualTo("Deluxe");
+        assertThat(data(own).path("bookingStatus").asText()).isEqualTo("RESERVED");
+        // The hold's end is a UTC instant (it ends in Z), about the 10 minutes the reservation lasts, so a browser in any
+        // time zone computes the same countdown.
+        String expiresAt = data(own).path("expiresAt").asText();
+        assertThat(expiresAt).endsWith("Z");
+        assertThat(java.time.Duration.between(java.time.Instant.now(), java.time.Instant.parse(expiresAt)))
+                .isBetween(java.time.Duration.ofMinutes(9), java.time.Duration.ofMinutes(11));
+        assertThat(data(own).path("createdAt").asText()).endsWith("Z");
+        // Room capacity (2) times the rooms booked (1).
+        assertThat(data(own).path("maxGuests").asInt()).isEqualTo(2);
+
+        assertThat(get("/bookings/" + bookingId, newGuestToken()).getStatusCode())
+                .as("another guest").isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(get("/bookings/" + bookingId, null).getStatusCode())
+                .as("not signed in").isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(get("/bookings/999999999", guest).getStatusCode())
+                .as("unknown booking").isEqualTo(HttpStatus.NOT_FOUND);
+
+        // The same fields appear in the list of the guest's bookings.
+        JsonNode mine = data(get("/users/myBookings", guest));
+        assertThat(mine).hasSize(1);
+        assertThat(mine.get(0).path("hotelName").asText()).isEqualTo("Test Hotel");
+    }
+
     @Test
     void searchHidesAHotelWhoseLastRoomIsHeld() {
         TestHotel hotel = createActiveHotel(newManagerToken(), 1, "1500.00");

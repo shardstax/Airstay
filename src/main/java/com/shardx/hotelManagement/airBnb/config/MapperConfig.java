@@ -16,6 +16,13 @@ public class MapperConfig {
         modelMapper.typeMap(Booking.class, BookingDto.class).addMappings(mapper -> {
             mapper.map(src -> src.getHotel().getId(), BookingDto::setHotelId);
             mapper.map(src -> src.getRoom().getId(), BookingDto::setRoomId);
+            mapper.map(src -> src.getHotel().getName(), BookingDto::setHotelName);
+            mapper.map(src -> src.getRoom().getType(), BookingDto::setRoomType);
+            // Set in BookingServiceImpl.toDto: the entity keeps zone-less local times, the API sends UTC instants.
+            mapper.skip(BookingDto::setCreatedAt);
+            mapper.skip(BookingDto::setUpdatedAt);
+            mapper.skip(BookingDto::setExpiresAt);
+            mapper.skip(BookingDto::setMaxGuests);
         });
         return modelMapper;
     }

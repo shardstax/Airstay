@@ -31,6 +31,9 @@ public interface BookingService {
 
     BookingStatus getBookingStatus(Long bookingId);
 
+    /** One of the caller's own bookings; 404 if it does not exist, 403 if it belongs to someone else. */
+    BookingDto getBooking(Long bookingId);
+
     List<BookingDto> getAllBookingsByHotelId(Long hotelId);
 
     HotelReportDto getHotelReport(Long hotelId, LocalDate startDate, LocalDate endDate);
