@@ -1,95 +1,134 @@
-import { errorMessage, unwrapEnvelope } from './client';
+import { getAccessToken, onSessionExpired, setAccessToken } from '@/shared/session/accessToken';
+import { ada, mockApi } from '@/test/mockApi';
 
-const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json', ...headers },
+import { api } from './client';
+
+const unauthorized = { status: 401, error: { message: 'Expired or invalid token' } };
+
+describe('the API client and the access token', () => {
+  it('sends the access token, and sends nothing when there is none', async () => {
+    const backend = mockApi({ 'GET /users/profile': { data: ada } });
+
+    await api.GET('/users/profile');
+    setAccessToken('abc');
+    await api.GET('/users/profile');
+
+    expect(backend.calls.map((call) => call.authorization)).toEqual([null, 'Bearer abc']);
   });
 
-const readJson = async (response: Response): Promise<unknown> => response.json();
+  it('returns the bare body, not the envelope', async () => {
+    mockApi({ 'GET /users/profile': { data: ada } });
 
-const wrapped = (data: unknown) => ({ timeStamp: '2026-11-17T10:00:00', data });
+    const { data } = await api.GET('/users/profile');
 
-describe('unwrapEnvelope', () => {
-  it('returns the bare data of a successful wrapped response', async () => {
-    const out = await unwrapEnvelope(json(wrapped({ id: 7, name: 'Hotel' }), 201));
-
-    expect(out.status).toBe(201);
-    expect(await readJson(out)).toEqual({ id: 7, name: 'Hotel' });
+    expect(data).toEqual(ada);
   });
 
-  it('keeps a paged result intact', async () => {
-    const page = { content: [{ id: 1 }], page: { totalElements: 1 } };
+  it('renews an expired token once and replays the request with the new one', async () => {
+    setAccessToken('expired');
+    const backend = mockApi({
+      'GET /users/profile': (request) =>
+        request.headers.get('authorization') === 'Bearer fresh' ? { data: ada } : unauthorized,
+      'POST /auth/refresh': { data: { accessToken: 'fresh' } },
+    });
 
-    expect(await readJson(await unwrapEnvelope(json(wrapped(page))))).toEqual(page);
+    const { data } = await api.GET('/users/profile');
+
+    expect(data).toEqual(ada);
+    expect(backend.keys()).toEqual(['GET /users/profile', 'POST /auth/refresh', 'GET /users/profile']);
+    expect(getAccessToken()).toBe('fresh');
   });
 
-  it('accepts a content type that carries a charset', async () => {
-    const response = json(wrapped({ id: 1 }), 200, { 'content-type': 'application/json;charset=UTF-8' });
+  it('replays a request that has a body', async () => {
+    setAccessToken('expired');
+    const backend = mockApi({
+      'POST /users/guests': (request) =>
+        request.headers.get('authorization') === 'Bearer fresh'
+          ? { status: 201, data: { id: 5 } }
+          : unauthorized,
+      'POST /auth/refresh': { data: { accessToken: 'fresh' } },
+    });
 
-    expect(await readJson(await unwrapEnvelope(response))).toEqual({ id: 1 });
-  });
+    const { data } = await api.POST('/users/guests', { body: { name: 'Traveller' } });
 
-  it('turns a null data field into null', async () => {
-    expect(await readJson(await unwrapEnvelope(json(wrapped(null))))).toBeNull();
-  });
-
-  it('drops the length and encoding headers of the original body', async () => {
-    const response = json(wrapped({ id: 1 }), 200, { 'content-length': '999', 'content-encoding': 'gzip' });
-
-    const out = await unwrapEnvelope(response);
-
-    expect(out.headers.get('content-length')).toBeNull();
-    expect(out.headers.get('content-encoding')).toBeNull();
-    expect(out.headers.get('content-type')).toContain('application/json');
-  });
-
-  it('leaves error responses alone so the message is still readable', async () => {
-    const body = { error: { status: 'CONFLICT', message: 'Room is not available' } };
-    const out = await unwrapEnvelope(json(body, 409));
-
-    expect(out.status).toBe(409);
-    expect(await readJson(out)).toEqual(body);
-  });
-
-  it('passes an empty 204 straight through', async () => {
-    const response = new Response(null, { status: 204 });
-
-    expect(await unwrapEnvelope(response)).toBe(response);
-  });
-
-  it('passes a body without the envelope keys through unchanged', async () => {
-    expect(await readJson(await unwrapEnvelope(json({ status: 'UP' })))).toEqual({ status: 'UP' });
-  });
-
-  it('does not unwrap a body that merely has a data field of its own', async () => {
-    const body = { data: [1, 2, 3], label: 'not an envelope' };
-
-    expect(await readJson(await unwrapEnvelope(json(body)))).toEqual(body);
-  });
-
-  it('passes a non-JSON success response straight through', async () => {
-    const response = new Response('ok', { status: 200, headers: { 'content-type': 'text/plain' } });
-
-    expect(await unwrapEnvelope(response)).toBe(response);
-  });
-});
-
-describe('errorMessage', () => {
-  it('uses the server message', () => {
-    expect(errorMessage({ error: { message: 'Room is not available' } })).toBe('Room is not available');
-  });
-
-  it('adds the field problems', () => {
+    expect(data).toEqual({ id: 5 });
     expect(
-      errorMessage({
-        error: { message: 'Validation failed', subErrors: ['email: must be valid', 'name: required'] },
-      }),
-    ).toBe('Validation failed: email: must be valid; name: required');
+      backend.calls.filter((call) => call.key === 'POST /users/guests').map((call) => call.body),
+    ).toEqual([{ name: 'Traveller' }, { name: 'Traveller' }]);
   });
 
-  it('falls back when there is nothing readable', () => {
-    expect(errorMessage(undefined)).toMatch(/something went wrong/i);
-    expect(errorMessage({}, 'custom')).toBe('custom');
+  it('refreshes only once when several requests expire together', async () => {
+    setAccessToken('expired');
+    const backend = mockApi({
+      'GET /users/profile': (request) =>
+        request.headers.get('authorization') === 'Bearer fresh' ? { data: ada } : unauthorized,
+      'GET /users/guests': (request) =>
+        request.headers.get('authorization') === 'Bearer fresh' ? { data: [] } : unauthorized,
+      'POST /auth/refresh': { data: { accessToken: 'fresh' } },
+    });
+
+    const [profile, guests] = await Promise.all([api.GET('/users/profile'), api.GET('/users/guests')]);
+
+    expect(profile.data).toEqual(ada);
+    expect(guests.data).toEqual([]);
+    expect(backend.count('POST /auth/refresh')).toBe(1);
+  });
+
+  it('announces the end of the session when the token cannot be renewed', async () => {
+    setAccessToken('expired');
+    mockApi({
+      'GET /users/profile': unauthorized,
+      'POST /auth/refresh': { status: 401, error: { message: 'Refresh token expired' } },
+    });
+    const expired = vi.fn();
+    const unsubscribe = onSessionExpired(expired);
+
+    const { response } = await api.GET('/users/profile');
+    unsubscribe();
+
+    expect(response.status).toBe(401);
+    expect(expired).toHaveBeenCalledTimes(1);
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it('gives up after one replay instead of looping', async () => {
+    setAccessToken('expired');
+    const backend = mockApi({
+      'GET /users/profile': unauthorized,
+      'POST /auth/refresh': { data: { accessToken: 'fresh' } },
+    });
+    const expired = vi.fn();
+    const unsubscribe = onSessionExpired(expired);
+
+    await api.GET('/users/profile');
+    unsubscribe();
+
+    expect(backend.count('GET /users/profile')).toBe(2);
+    expect(backend.count('POST /auth/refresh')).toBe(1);
+    expect(expired).toHaveBeenCalledTimes(1);
+  });
+
+  it('never refreshes because of a failed login', async () => {
+    setAccessToken('some-token');
+    const backend = mockApi({ 'POST /auth/login': { status: 401, error: { message: 'Bad credentials' } } });
+    const expired = vi.fn();
+    const unsubscribe = onSessionExpired(expired);
+
+    const { response } = await api.POST('/auth/login', { body: { email: 'a@b.co', password: 'wrong' } });
+    unsubscribe();
+
+    expect(response.status).toBe(401);
+    expect(backend.keys()).toEqual(['POST /auth/login']);
+    expect(backend.calls[0]?.authorization).toBeNull();
+    expect(expired).not.toHaveBeenCalled();
+  });
+
+  it('does not refresh for errors other than 401', async () => {
+    setAccessToken('valid');
+    const backend = mockApi({ 'GET /users/profile': { status: 403, error: { message: 'Forbidden' } } });
+
+    await api.GET('/users/profile');
+
+    expect(backend.keys()).toEqual(['GET /users/profile']);
   });
 });

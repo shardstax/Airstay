@@ -1,42 +1,16 @@
 import createClient, { type Middleware } from 'openapi-fetch';
 
+import { getAccessToken, notifySessionExpired } from '@/shared/session/accessToken';
+import { refreshAccessToken } from '@/shared/session/refresh';
+
+import { unwrapEnvelope } from './envelope';
 import type { paths } from './schema';
 
-interface Envelope {
-  timeStamp: unknown;
-  data: unknown;
-}
+const API_PREFIX = '/api/v1';
 
-/** The backend wraps every successful body as `{ timeStamp, data }`; both keys together identify the wrapper. */
-function isEnvelope(body: unknown): body is Envelope {
-  return typeof body === 'object' && body !== null && 'timeStamp' in body && 'data' in body;
-}
-
-/**
- * The OpenAPI spec (and so the generated types) describe the bare body, but the backend wraps it as
- * `{ timeStamp, data, error }`. This turns a successful wrapped response back into the bare body so the runtime matches
- * the types. Error responses are left as they are: they carry `{ error: { status, message, subErrors } }`.
- */
-export async function unwrapEnvelope(response: Response): Promise<Response> {
-  const isJson = response.headers.get('content-type')?.includes('application/json') ?? false;
-  if (!response.ok || !isJson || response.status === 204) {
-    return response;
-  }
-
-  const body: unknown = await response.clone().json();
-  if (!isEnvelope(body)) {
-    return response;
-  }
-
-  // The body is re-serialised, so the length and encoding the server reported no longer describe it.
-  const headers = new Headers(response.headers);
-  headers.delete('content-length');
-  headers.delete('content-encoding');
-  return new Response(JSON.stringify(body.data), {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
+/** Login, refresh, logout and sign-up answer 401 for reasons that a new token cannot fix, so they never trigger a refresh. */
+function isAuthEndpoint(url: string): boolean {
+  return new URL(url).pathname.startsWith(`${API_PREFIX}/auth/`);
 }
 
 const unwrap: Middleware = {
@@ -45,19 +19,54 @@ const unwrap: Middleware = {
   },
 };
 
-/** The error body the backend sends (see ApiError on the server). */
-export interface ApiErrorBody {
-  error?: { status?: string; message?: string; subErrors?: string[] };
-}
+/** Requests that went out with a token, kept by id so one can be replayed if the token turns out to have expired. */
+const replayable = new Map<string, Request>();
 
-/** A readable message for any failed call, with the field problems when the server listed them. */
-export function errorMessage(error: unknown, fallback = 'Something went wrong. Please try again.'): string {
-  const detail = (error as ApiErrorBody | undefined)?.error;
-  if (!detail?.message) {
-    return fallback;
-  }
-  return detail.subErrors?.length ? `${detail.message}: ${detail.subErrors.join('; ')}` : detail.message;
-}
+const authorize: Middleware = {
+  onRequest({ request, id }) {
+    const token = getAccessToken();
+    if (token && !isAuthEndpoint(request.url)) {
+      request.headers.set('Authorization', `Bearer ${token}`);
+      replayable.set(id, request.clone());
+    }
+    return request;
+  },
 
-export const api = createClient<paths>({ baseUrl: '/api/v1' });
+  async onResponse({ response, id }) {
+    const original = replayable.get(id);
+    replayable.delete(id);
+    if (response.status !== 401 || !original) {
+      return response;
+    }
+
+    // The access token expired (it lives 10 minutes). Renew it once and replay the request once; a second 401 means
+    // the session is really gone.
+    const token = await refreshAccessToken();
+    if (!token) {
+      notifySessionExpired();
+      return response;
+    }
+    original.headers.set('Authorization', `Bearer ${token}`);
+    const retried = await fetch(original);
+    if (retried.status === 401) {
+      notifySessionExpired();
+    }
+    return retried;
+  },
+
+  onError({ id }) {
+    replayable.delete(id);
+  },
+};
+
+export const api = createClient<paths>({
+  // Absolute, built from the page's own origin: browsers accept a relative base, but a Request outside a page does not.
+  baseUrl: `${globalThis.location.origin}${API_PREFIX}`,
+  // Looked up at call time, so tests (and any future wrapper) can replace the global fetch.
+  fetch: (request) => globalThis.fetch(request),
+});
+
+// onResponse middleware runs in reverse registration order: `authorize` sees the raw response first (and may replay the
+// request), then `unwrap` removes the envelope from whichever response is the final one.
 api.use(unwrap);
+api.use(authorize);
