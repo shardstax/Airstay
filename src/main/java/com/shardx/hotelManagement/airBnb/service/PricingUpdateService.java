@@ -43,9 +43,15 @@ public class PricingUpdateService {
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
-    /** Each hotel is priced in its own short transaction, so bookings are never blocked for the whole run. */
-    @Scheduled(cron = "0 0 * * * *")
+    /**
+     * Each hotel is priced in its own short transaction, so bookings are never blocked for the whole run. Hourly by
+     * default; {@code PRICING_REFRESH_CRON} changes that (the load tests run it every minute to time it).
+     */
+    @Scheduled(cron = "${airstay.pricing.refresh-cron:0 0 * * * *}")
     public void updatePrices() {
+        long startedAt = System.nanoTime();
+        int hotels = 0;
+        int failed = 0;
         int page = 0;
         while (true) {
             Page<Hotel> hotelPage = hotelRepository.findAll(PageRequest.of(page, HOTEL_BATCH_SIZE));
@@ -53,14 +59,18 @@ public class PricingUpdateService {
                 break;
             }
             for (Hotel hotel : hotelPage.getContent()) {
+                hotels++;
                 try {
                     transactionTemplate.executeWithoutResult(status -> updateHotelPrices(hotel));
                 } catch (RuntimeException e) {
+                    failed++;
                     log.error("Price update failed for hotel {}; will retry next run", hotel.getId(), e);
                 }
             }
             page++;
         }
+        log.info("Price refresh finished: {} hotels ({} failed) in {} ms", hotels, failed,
+                (System.nanoTime() - startedAt) / 1_000_000);
     }
 
     /** Recomputes stored nightly prices and the hotel's daily "from" price. Joins the caller's transaction. */
