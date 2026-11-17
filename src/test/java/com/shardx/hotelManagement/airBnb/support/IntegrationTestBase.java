@@ -20,10 +20,13 @@ import org.springframework.web.util.DefaultUriBuilderFactory;
 import java.net.http.HttpClient;
 import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 /**
  * Base for integration tests: the real application on a random port, a real PostgreSQL
@@ -52,6 +55,31 @@ public abstract class IntegrationTestBase {
     protected String webhookSecret;
 
     protected record TestHotel(long hotelId, long roomId, String city) {
+    }
+
+    // ---- a booking that went through the whole journey ----------------------------------------
+
+    protected record ConfirmedBooking(long bookingId, String email, String token, TestHotel hotel, String sessionId) {
+    }
+
+    /** Hotel, guest, hold, guests, payment session and the signed Stripe webhook: a CONFIRMED booking. */
+    protected ConfirmedBooking createConfirmedBooking(LocalDate checkIn, LocalDate checkOut) {
+        TestHotel hotel = createActiveHotel(newManagerToken(), 2, "1000.00");
+        String email = "guest-" + UUID.randomUUID() + "@example.com";
+        post("/auth/signup", null, Map.of("email", email, "password", PASSWORD, "name", "Event Guest"));
+        String token = data(post("/auth/login", null, Map.of("email", email, "password", PASSWORD)))
+                .path("accessToken").asText();
+        long guestId = addGuest(token);
+        long bookingId = data(initBooking(token, hotel, checkIn, checkOut, 1)).path("id").asLong();
+        post("/bookings/" + bookingId + "/addGuests", token, List.of(guestId));
+
+        String sessionId = "cs_it_" + bookingId;
+        when(checkoutService.createCheckoutSession(any(), any(), any(), any(), any()))
+                .thenReturn(new CheckoutService.CheckoutSession(sessionId, "https://checkout.test/" + bookingId));
+        post("/bookings/" + bookingId + "/payments", token, null);
+        assertThat(sendStripeEvent("checkout.session.completed", sessionId, "paid", "complete").getStatusCode())
+                .isEqualTo(HttpStatus.NO_CONTENT);
+        return new ConfirmedBooking(bookingId, email, token, hotel, sessionId);
     }
 
     // ---- a client with no hidden behaviour ----------------------------------------------------

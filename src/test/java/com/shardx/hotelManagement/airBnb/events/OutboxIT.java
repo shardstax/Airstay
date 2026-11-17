@@ -5,13 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shardx.hotelManagement.airBnb.entity.Booking;
 import com.shardx.hotelManagement.airBnb.repository.BookingRepository;
 import com.shardx.hotelManagement.airBnb.service.BookingExpiryScheduler;
-import com.shardx.hotelManagement.airBnb.service.CheckoutService;
 import com.shardx.hotelManagement.airBnb.support.IntegrationTestBase;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.common.header.Header;
-import org.apache.kafka.common.serialization.StringDeserializer;
+import com.shardx.hotelManagement.airBnb.support.KafkaTopicReader;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -19,20 +14,13 @@ import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.kafka.KafkaContainer;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
 
 /** The transactional outbox and its relay against real PostgreSQL and a real Kafka broker. */
 class OutboxIT extends IntegrationTestBase {
@@ -49,7 +37,7 @@ class OutboxIT extends IntegrationTestBase {
 
     @Test
     void aConfirmedBookingIsPublishedToKafkaWithEverythingAConsumerNeeds() {
-        Confirmed confirmed = confirmedBooking();
+        ConfirmedBooking confirmed = createConfirmedBooking(checkIn, checkOut);
 
         JsonNode event = awaitEvent(Topics.BOOKING_EVENTS, confirmed.bookingId(), "BOOKING_CONFIRMED");
 
@@ -65,7 +53,7 @@ class OutboxIT extends IntegrationTestBase {
 
     @Test
     void cancellationAndExpiryArePublishedToo() {
-        Confirmed confirmed = confirmedBooking();
+        ConfirmedBooking confirmed = createConfirmedBooking(checkIn, checkOut);
         assertThat(post("/bookings/" + confirmed.bookingId() + "/cancel", confirmed.token(), null).getStatusCode())
                 .isEqualTo(HttpStatus.NO_CONTENT);
 
@@ -85,7 +73,7 @@ class OutboxIT extends IntegrationTestBase {
 
     @Test
     void anEventIsRolledBackTogetherWithTheChangeThatCausedIt() {
-        Confirmed confirmed = confirmedBooking();
+        ConfirmedBooking confirmed = createConfirmedBooking(checkIn, checkOut);
 
         assertThatThrownBy(() -> transactions.execute(status -> {
             Booking booking = bookingRepository.findById(confirmed.bookingId()).orElseThrow();
@@ -121,10 +109,10 @@ class OutboxIT extends IntegrationTestBase {
      */
     @Test
     void bookingsKeepWorkingWhileKafkaIsDownAndTheEventArrivesWhenItReturns() throws Exception {
-        Confirmed confirmed;
+        ConfirmedBooking confirmed;
         kafka.getDockerClient().pauseContainerCmd(kafka.getContainerId()).exec();
         try {
-            confirmed = confirmedBooking();
+            confirmed = createConfirmedBooking(checkIn, checkOut);
 
             assertThat(bookingStatus(confirmed.token(), confirmed.bookingId())).as("booking works without Kafka")
                     .isEqualTo("CONFIRMED");
@@ -143,29 +131,6 @@ class OutboxIT extends IntegrationTestBase {
 
     // ---------------------------------------------------------------------------------------------
 
-    private record Confirmed(long bookingId, String email, String token) {
-    }
-
-    /** Runs the whole guest journey up to a Stripe-confirmed booking. */
-    private Confirmed confirmedBooking() {
-        TestHotel hotel = createActiveHotel(newManagerToken(), 2, "1000.00");
-        String email = "guest-" + UUID.randomUUID() + "@example.com";
-        post("/auth/signup", null, Map.of("email", email, "password", PASSWORD, "name", "Event Guest"));
-        String token = data(post("/auth/login", null, Map.of("email", email, "password", PASSWORD)))
-                .path("accessToken").asText();
-        long guestId = addGuest(token);
-        long bookingId = data(initBooking(token, hotel, checkIn, checkOut, 1)).path("id").asLong();
-        post("/bookings/" + bookingId + "/addGuests", token, List.of(guestId));
-
-        String sessionId = "cs_outbox_" + bookingId;
-        when(checkoutService.createCheckoutSession(any(), any(), any(), any(), any()))
-                .thenReturn(new CheckoutService.CheckoutSession(sessionId, "https://checkout.test/" + bookingId));
-        post("/bookings/" + bookingId + "/payments", token, null);
-        assertThat(sendStripeEvent("checkout.session.completed", sessionId, "paid", "complete").getStatusCode())
-                .isEqualTo(HttpStatus.NO_CONTENT);
-        return new Confirmed(bookingId, email, token);
-    }
-
     private int eventRows(long bookingId, String type) {
         return jdbc.queryForObject("SELECT count(*) FROM outbox_event WHERE event_key = ? AND event_type = ?",
                 Integer.class, String.valueOf(bookingId), type);
@@ -177,30 +142,7 @@ class OutboxIT extends IntegrationTestBase {
                 Boolean.class, String.valueOf(bookingId), type));
     }
 
-    /** Reads the topic from the beginning with a fresh consumer group until the wanted event shows up. */
     private JsonNode awaitEvent(String topic, long bookingId, String type) {
-        Properties props = new Properties();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers());
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "outbox-it-" + UUID.randomUUID());
-        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
-        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props)) {
-            consumer.subscribe(List.of(topic));
-            long deadline = System.currentTimeMillis() + 40_000;
-            while (System.currentTimeMillis() < deadline) {
-                for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(500))) {
-                    Header typeHeader = record.headers().lastHeader("event-type");
-                    if (String.valueOf(bookingId).equals(record.key()) && typeHeader != null
-                            && type.equals(new String(typeHeader.value(), StandardCharsets.UTF_8))) {
-                        return objectMapper.readTree(record.value());
-                    }
-                }
-            }
-        } catch (Exception e) {
-            throw new AssertionError("Failed while reading " + topic, e);
-        }
-        throw new AssertionError("No " + type + " event for booking " + bookingId + " arrived on " + topic);
+        return new KafkaTopicReader(kafka.getBootstrapServers(), objectMapper).awaitEvent(topic, bookingId, type);
     }
 }
