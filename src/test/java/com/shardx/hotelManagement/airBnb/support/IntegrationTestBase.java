@@ -8,10 +8,16 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.*;
+import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.web.client.DefaultResponseErrorHandler;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.DefaultUriBuilderFactory;
 
+import java.net.http.HttpClient;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
@@ -46,6 +52,36 @@ public abstract class IntegrationTestBase {
     protected String webhookSecret;
 
     protected record TestHotel(long hotelId, long roomId, String city) {
+    }
+
+    // ---- a client with no hidden behaviour ----------------------------------------------------
+
+    /**
+     * A client that opens its own connection per request, never retries and never throws on 4xx/5xx.
+     * The shared TestRestTemplate (Apache HttpClient 5) pools only 5 connections per host and silently RE-SENDS a
+     * request that was answered with 429 or 503 after the Retry-After delay (a 60-second wait that then succeeds),
+     * which hides rate limiting from tests. Use this client whenever a test expects a 429 or needs real concurrency.
+     */
+    protected RestTemplate newPlainClient() {
+        HttpClient httpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
+        RestTemplate client = new RestTemplate(new JdkClientHttpRequestFactory(httpClient));
+        client.setUriTemplateHandler(new DefaultUriBuilderFactory(rest.getRootUri()));
+        client.setErrorHandler(new DefaultResponseErrorHandler() {
+            @Override
+            public boolean hasError(ClientHttpResponse response) {
+                return false;
+            }
+        });
+        return client;
+    }
+
+    protected ResponseEntity<JsonNode> plainPost(RestTemplate client, String path, String token, Object body) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        if (token != null) {
+            headers.setBearerAuth(token);
+        }
+        return client.exchange(path, HttpMethod.POST, new HttpEntity<>(body, headers), JsonNode.class);
     }
 
     // ---- users ------------------------------------------------------------------------------

@@ -3,12 +3,14 @@ package com.shardx.hotelManagement.airBnb.advice;
 import com.shardx.hotelManagement.airBnb.exception.BadRequestException;
 import com.shardx.hotelManagement.airBnb.exception.ConflictException;
 import com.shardx.hotelManagement.airBnb.exception.PaymentProviderException;
+import com.shardx.hotelManagement.airBnb.exception.RateLimitExceededException;
 import com.shardx.hotelManagement.airBnb.exception.ResourceNotFoundException;
 import com.shardx.hotelManagement.airBnb.exception.UnAuthorisedException;
 import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -46,6 +48,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ApiResponse<?>> handleConflict(ConflictException exception) {
         return build(HttpStatus.CONFLICT, exception.getMessage());
+    }
+
+    /** 429 plus a Retry-After header, so well-behaved clients know when to try again. */
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ApiResponse<?>> handleRateLimit(RateLimitExceededException exception) {
+        ApiError apiError = ApiError.builder()
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .message(exception.getMessage())
+                .build();
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(exception.getRetryAfterSeconds()))
+                .body(new ApiResponse<>(apiError));
     }
 
     @ExceptionHandler(PaymentProviderException.class)

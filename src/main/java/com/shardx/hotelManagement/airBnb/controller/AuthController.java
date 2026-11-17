@@ -4,6 +4,8 @@ import com.shardx.hotelManagement.airBnb.dto.LoginDto;
 import com.shardx.hotelManagement.airBnb.dto.LoginResponseDto;
 import com.shardx.hotelManagement.airBnb.dto.SignUpRequestDto;
 import com.shardx.hotelManagement.airBnb.dto.UserDto;
+import com.shardx.hotelManagement.airBnb.ratelimit.RateLimitProperties;
+import com.shardx.hotelManagement.airBnb.ratelimit.RateLimiter;
 import com.shardx.hotelManagement.airBnb.security.AuthService;
 import com.shardx.hotelManagement.airBnb.security.JWTService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,6 +23,7 @@ import org.springframework.security.authentication.AuthenticationServiceExceptio
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/auth")
@@ -30,6 +33,8 @@ public class AuthController {
     private static final String REFRESH_COOKIE = "refreshToken";
 
     private final AuthService authService;
+    private final RateLimiter rateLimiter;
+    private final RateLimitProperties rateLimits;
 
     @Value("${airstay.security.refresh-cookie.secure}")
     private boolean refreshCookieSecure;
@@ -40,7 +45,9 @@ public class AuthController {
     @PostMapping("/signup")
     @Operation(summary = "Create an account (guest or hotel manager)", tags = {"Auth"})
     @ApiResponse(responseCode = "201", description = "Created")
-    public ResponseEntity<UserDto> signup(@Valid @RequestBody SignUpRequestDto signUpRequestDto) {
+    public ResponseEntity<UserDto> signup(@Valid @RequestBody SignUpRequestDto signUpRequestDto,
+                                          HttpServletRequest request) {
+        rateLimiter.check("signup-ip", request.getRemoteAddr(), rateLimits.getSignupPerIp());
         return new ResponseEntity<>(authService.signUp(signUpRequestDto), HttpStatus.CREATED);
     }
 
@@ -49,6 +56,10 @@ public class AuthController {
     public ResponseEntity<LoginResponseDto> login(@Valid @RequestBody LoginDto loginDto,
                                                   HttpServletRequest request,
                                                   HttpServletResponse response) {
+        // Every attempt counts (successful or not): per address against one machine trying many accounts, and per
+        // e-mail against many machines guessing one account's password.
+        rateLimiter.check("login-ip", request.getRemoteAddr(), rateLimits.getLoginPerIp());
+        rateLimiter.check("login-email", loginDto.getEmail().trim().toLowerCase(Locale.ROOT), rateLimits.getLoginPerEmail());
         AuthService.AuthTokens tokens = authService.login(loginDto);
         response.addHeader(HttpHeaders.SET_COOKIE,
                 refreshCookie(request, tokens.refreshToken(), JWTService.REFRESH_TOKEN_TTL).toString());
