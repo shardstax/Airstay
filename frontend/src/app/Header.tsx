@@ -22,7 +22,7 @@ export function Header() {
           {isLoading ? null : user ? (
             <>
               <Link to="/account" className={`${linkClass} text-ink hover:bg-canvas`}>
-                {user.name ?? 'My account'}
+                {user.name}
               </Link>
               <Button
                 variant="secondary"

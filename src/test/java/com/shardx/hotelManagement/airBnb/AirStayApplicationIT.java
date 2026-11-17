@@ -73,6 +73,40 @@ class AirStayApplicationIT extends IntegrationTestBase {
         assertThat(documentedStatuses(paths, "/hotels/search", "get")).containsExactly("200");
     }
 
+    /**
+     * The frontend generates its TypeScript types from this spec. A field the API always returns must be marked required, or
+     * the generated type makes it optional and every screen has to guard against a value that is never missing. Fields that
+     * can really be absent (photos, amenities, ...) must stay optional so the type tells the truth in both directions.
+     */
+    @Test
+    void fieldsThatAreAlwaysReturnedAreRequiredInTheApiDocs() {
+        JsonNode schemas = get("/v3/api-docs", null).getBody().path("components").path("schemas");
+
+        assertRequired(schemas, "HotelPriceResponseDto", "id", "name", "city", "price");
+        assertRequired(schemas, "RoomPriceResponseDto", "id", "type", "price");
+        assertRequired(schemas, "HotelInfoDto", "hotel", "rooms");
+        assertRequired(schemas, "BookingDto", "id", "hotelId", "roomId", "roomsCount", "checkInDate", "checkOutDate",
+                "bookingStatus", "amount");
+        assertRequired(schemas, "UserDto", "id", "email", "name", "roles");
+        assertRequired(schemas, "LoginResponseDto", "accessToken");
+        assertRequired(schemas, "BookingStatusResponseDto", "bookingStatus");
+        assertRequired(schemas, "BookingPaymentInitResponseDto", "sessionUrl");
+
+        assertThat(requiredNames(schemas, "HotelPriceResponseDto")).doesNotContain("photos", "amenities", "contactInfo");
+        assertThat(requiredNames(schemas, "BookingDto")).doesNotContain("expiresAt", "guests");
+    }
+
+    private static void assertRequired(JsonNode schemas, String schema, String... fields) {
+        assertThat(schemas.has(schema)).as("schema %s exists", schema).isTrue();
+        assertThat(requiredNames(schemas, schema)).as("required fields of %s", schema).contains(fields);
+    }
+
+    private static List<String> requiredNames(JsonNode schemas, String schema) {
+        List<String> names = new ArrayList<>();
+        schemas.path(schema).path("required").forEach(node -> names.add(node.asText()));
+        return names;
+    }
+
     private static List<String> documentedStatuses(JsonNode paths, String path, String method) {
         List<String> statuses = new ArrayList<>();
         paths.path(path).path(method).path("responses").fieldNames().forEachRemaining(statuses::add);

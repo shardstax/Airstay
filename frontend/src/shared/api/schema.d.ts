@@ -455,21 +455,21 @@ export interface components {
             capacity: number;
         };
         BookingPaymentInitResponseDto: {
-            sessionUrl?: string;
+            sessionUrl: string;
         };
         BookingDto: {
             /** Format: int64 */
-            id?: number;
+            id: number;
             /** Format: int64 */
-            hotelId?: number;
+            hotelId: number;
             /** Format: int64 */
-            roomId?: number;
+            roomId: number;
             /** Format: int32 */
-            roomsCount?: number;
+            roomsCount: number;
             /** Format: date */
-            checkInDate?: string;
+            checkInDate: string;
             /** Format: date */
-            checkOutDate?: string;
+            checkOutDate: string;
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -477,9 +477,9 @@ export interface components {
             /** Format: date-time */
             expiresAt?: string;
             /** @enum {string} */
-            bookingStatus?: "RESERVED" | "GUESTS_ADDED" | "PAYMENTS_PENDING" | "CONFIRMED" | "CANCELLED" | "EXPIRED";
+            bookingStatus: "RESERVED" | "GUESTS_ADDED" | "PAYMENTS_PENDING" | "CONFIRMED" | "CANCELLED" | "EXPIRED";
             guests?: components["schemas"]["GuestDto"][];
-            amount?: number;
+            amount: number;
         };
         BookingRequest: {
             /** Format: int64 */
@@ -502,17 +502,17 @@ export interface components {
         };
         UserDto: {
             /** Format: int64 */
-            id?: number;
-            email?: string;
-            name?: string;
+            id: number;
+            email: string;
+            name: string;
             /** @enum {string} */
             gender?: "MALE" | "FEMALE" | "OTHER";
             /** Format: date */
             dateOfBirth?: string;
-            roles?: ("GUEST" | "HOTEL_MANAGER")[];
+            roles: ("GUEST" | "HOTEL_MANAGER")[];
         };
         LoginResponseDto: {
-            accessToken?: string;
+            accessToken: string;
         };
         LoginDto: {
             email: string;
@@ -534,28 +534,28 @@ export interface components {
             closed: boolean;
         };
         HotelInfoDto: {
-            hotel?: components["schemas"]["HotelDto"];
-            rooms?: components["schemas"]["RoomPriceResponseDto"][];
+            hotel: components["schemas"]["HotelDto"];
+            rooms: components["schemas"]["RoomPriceResponseDto"][];
         };
         RoomPriceResponseDto: {
             /** Format: int64 */
-            id?: number;
-            type?: string;
+            id: number;
+            type: string;
             photos?: string[];
             amenities?: string[];
             /** Format: double */
-            price?: number;
+            price: number;
         };
         HotelPriceResponseDto: {
             /** Format: int64 */
-            id?: number;
-            name?: string;
-            city?: string;
+            id: number;
+            name: string;
+            city: string;
             photos?: string[];
             amenities?: string[];
             contactInfo?: components["schemas"]["HotelContactInfo"];
             /** Format: double */
-            price?: number;
+            price: number;
         };
         PageMetadata: {
             /** Format: int64 */
@@ -573,7 +573,7 @@ export interface components {
         };
         BookingStatusResponseDto: {
             /** @enum {string} */
-            bookingStatus?: "RESERVED" | "GUESTS_ADDED" | "PAYMENTS_PENDING" | "CONFIRMED" | "CANCELLED" | "EXPIRED";
+            bookingStatus: "RESERVED" | "GUESTS_ADDED" | "PAYMENTS_PENDING" | "CONFIRMED" | "CANCELLED" | "EXPIRED";
         };
         InventoryDto: {
             /** Format: int64 */

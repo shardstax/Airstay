@@ -18,7 +18,7 @@ export function AccountPage() {
           <dd className="text-ink">{user?.email}</dd>
           <dt className="text-sm text-ink-muted">Account type</dt>
           <dd className="flex flex-wrap gap-2">
-            {user?.roles?.map((role) => (
+            {user?.roles.map((role) => (
               <Badge key={role} tone="brand">
                 {roleLabels[role] ?? role}
               </Badge>
