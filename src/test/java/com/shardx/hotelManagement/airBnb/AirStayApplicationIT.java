@@ -88,6 +88,8 @@ class AirStayApplicationIT extends IntegrationTestBase {
         assertRequired(schemas, "BookingDto", "id", "hotelId", "hotelName", "roomId", "roomType", "roomsCount", "checkInDate", "checkOutDate", "maxGuests",
                 "bookingStatus", "amount");
         assertRequired(schemas, "UserDto", "id", "email", "name", "roles");
+        assertRequired(schemas, "InventoryDto", "id", "date", "bookedCount", "reservedCount", "totalCount", "surgeFactor", "price", "closed");
+        assertRequired(schemas, "HotelReportDto", "bookingCount", "totalRevenue", "avgRevenue");
         assertRequired(schemas, "LoginResponseDto", "accessToken");
         assertRequired(schemas, "BookingStatusResponseDto", "bookingStatus");
         assertRequired(schemas, "PlaceDto", "id", "name", "country", "countryCode", "latitude", "longitude", "label");
