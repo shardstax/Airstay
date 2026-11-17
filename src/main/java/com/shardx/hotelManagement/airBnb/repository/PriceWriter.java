@@ -29,7 +29,12 @@ public class PriceWriter {
     }
 
     /**
-     * Sets the price of the given inventory rows in one statement.
+     * Sets the price of the given inventory rows: the rows are locked in id order first, then updated in one statement.
+     *
+     * <p>Why the explicit lock: a single UPDATE locks the rows in whatever order PostgreSQL visits them, while bookings
+     * lock the rows of a room in date order (which is id order, because a room's nights are created in date order). Two
+     * transactions that lock overlapping rows in different orders can deadlock; locking in ascending id order here keeps
+     * the "everyone locks in the same order" rule that the booking code relies on.
      *
      * @return the number of rows updated
      */
@@ -37,6 +42,11 @@ public class PriceWriter {
         return jdbc.execute((java.sql.Connection connection) -> {
             Array idArray = connection.createArrayOf("bigint", inventoryIds.toArray());
             Array priceArray = connection.createArrayOf("numeric", prices.toArray());
+            try (PreparedStatement lock = connection.prepareStatement(
+                    "SELECT id FROM inventory WHERE id = ANY(?) ORDER BY id FOR UPDATE")) {
+                lock.setArray(1, idArray);
+                lock.executeQuery().close();
+            }
             try (PreparedStatement statement = connection.prepareStatement("""
                     UPDATE inventory
                     SET price = changes.price, updated_at = ?
