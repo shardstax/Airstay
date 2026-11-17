@@ -60,6 +60,7 @@ class BookingServiceImplTest {
     @Mock private RoomRepository roomRepository;
     @Mock private InventoryRepository inventoryRepository;
     @Mock private CheckoutService checkoutService;
+    @Mock private IdempotencyKeyRepository idempotencyKeyRepository;
 
     private BookingServiceImpl bookingService;
     private User user;
@@ -70,7 +71,7 @@ class BookingServiceImplTest {
     void setUp() {
         bookingService = new BookingServiceImpl(guestRepository, new MapperConfig().modelMapper(), bookingRepository,
                 hotelRepository, roomRepository, inventoryRepository, checkoutService,
-                new PricingService("", CLOCK), CLOCK);
+                new PricingService("", CLOCK), CLOCK, idempotencyKeyRepository);
         ReflectionTestUtils.setField(bookingService, "frontendUrl", "http://localhost:5173");
         ReflectionTestUtils.setField(bookingService, "reservationHoldMinutes", 10L);
         ReflectionTestUtils.setField(bookingService, "paymentHoldMinutes", 35L);
@@ -120,7 +121,7 @@ class BookingServiceImplTest {
                 return saved;
             });
 
-            BookingDto result = bookingService.initialiseBooking(request(2));
+            BookingDto result = bookingService.initialiseBooking(request(2), null).booking();
 
             // 2 nights x 1000 x 2 rooms; the check-out day is not charged
             assertThat(result.getAmount()).isEqualByComparingTo("4000.00");
@@ -137,7 +138,7 @@ class BookingServiceImplTest {
             when(inventoryRepository.findAndLockAvailableInventory(ROOM_ID, CHECK_IN, LAST_NIGHT, 2))
                     .thenReturn(List.of(night(CHECK_IN))); // only 1 of 2 nights free
 
-            assertThatThrownBy(() -> bookingService.initialiseBooking(request(2)))
+            assertThatThrownBy(() -> bookingService.initialiseBooking(request(2), null))
                     .isInstanceOf(ConflictException.class);
             verify(inventoryRepository, never()).reserveRooms(anyLong(), any(), any(), anyInt());
             verify(bookingRepository, never()).save(any());
@@ -151,7 +152,7 @@ class BookingServiceImplTest {
             when(hotelRepository.findById(10L)).thenReturn(Optional.of(hotel));
             when(roomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room));
 
-            assertThatThrownBy(() -> bookingService.initialiseBooking(request(1)))
+            assertThatThrownBy(() -> bookingService.initialiseBooking(request(1), null))
                     .isInstanceOf(BadRequestException.class);
             verifyNoInteractions(inventoryRepository);
         }
@@ -161,9 +162,105 @@ class BookingServiceImplTest {
             hotel.setActive(false);
             when(hotelRepository.findById(10L)).thenReturn(Optional.of(hotel));
 
-            assertThatThrownBy(() -> bookingService.initialiseBooking(request(1)))
+            assertThatThrownBy(() -> bookingService.initialiseBooking(request(1), null))
                     .isInstanceOf(ConflictException.class);
             verifyNoInteractions(inventoryRepository);
+        }
+    }
+
+    @Nested
+    class IdempotentInit {
+
+        private static final String KEY = "retry-key-0001";
+
+        private void stubSuccessfulBooking() {
+            when(hotelRepository.findById(10L)).thenReturn(Optional.of(hotel));
+            when(roomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room));
+            when(inventoryRepository.findAndLockAvailableInventory(ROOM_ID, CHECK_IN, LAST_NIGHT, 2))
+                    .thenReturn(List.of(night(CHECK_IN), night(LAST_NIGHT)));
+            when(inventoryRepository.reserveRooms(ROOM_ID, CHECK_IN, LAST_NIGHT, 2)).thenReturn(2);
+            when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> {
+                Booking saved = invocation.getArgument(0);
+                saved.setId(BOOKING_ID);
+                return saved;
+            });
+        }
+
+        private IdempotencyKey storedKey(String requestHash, Long bookingId) {
+            IdempotencyKey stored = new IdempotencyKey();
+            stored.setUserId(1L);
+            stored.setIdempotencyKey(KEY);
+            stored.setRequestHash(requestHash);
+            stored.setBookingId(bookingId);
+            return stored;
+        }
+
+        @Test
+        void aNewKeyIsClaimedAndLinkedToTheBookingItCreated() {
+            stubSuccessfulBooking();
+            IdempotencyKey stored = storedKey(BookingServiceImpl.fingerprint(request(2)), null);
+            when(idempotencyKeyRepository.claim(eq(1L), eq(KEY), anyString(), any(LocalDateTime.class))).thenReturn(1);
+            when(idempotencyKeyRepository.findByUserIdAndIdempotencyKey(1L, KEY)).thenReturn(Optional.of(stored));
+
+            BookingService.BookingInitResult result = bookingService.initialiseBooking(request(2), KEY);
+
+            assertThat(result.replayed()).isFalse();
+            assertThat(result.booking().getId()).isEqualTo(BOOKING_ID);
+            assertThat(stored.getBookingId()).as("key linked to the new booking").isEqualTo(BOOKING_ID);
+        }
+
+        @Test
+        void aRepeatedRequestReturnsTheExistingBookingWithoutTouchingInventory() {
+            when(idempotencyKeyRepository.claim(eq(1L), eq(KEY), anyString(), any(LocalDateTime.class))).thenReturn(0);
+            when(idempotencyKeyRepository.findByUserIdAndIdempotencyKey(1L, KEY))
+                    .thenReturn(Optional.of(storedKey(BookingServiceImpl.fingerprint(request(2)), BOOKING_ID)));
+            when(bookingRepository.findById(BOOKING_ID))
+                    .thenReturn(Optional.of(booking(BookingStatus.RESERVED, NOW.plusMinutes(5))));
+
+            BookingService.BookingInitResult result = bookingService.initialiseBooking(request(2), KEY);
+
+            assertThat(result.replayed()).isTrue();
+            assertThat(result.booking().getId()).isEqualTo(BOOKING_ID);
+            verifyNoInteractions(inventoryRepository, hotelRepository, roomRepository);
+            verify(bookingRepository, never()).save(any());
+        }
+
+        @Test
+        void theSameKeyWithADifferentRequestIsRefused() {
+            when(idempotencyKeyRepository.claim(eq(1L), eq(KEY), anyString(), any(LocalDateTime.class))).thenReturn(0);
+            when(idempotencyKeyRepository.findByUserIdAndIdempotencyKey(1L, KEY))
+                    .thenReturn(Optional.of(storedKey(BookingServiceImpl.fingerprint(request(1)), BOOKING_ID)));
+
+            assertThatThrownBy(() -> bookingService.initialiseBooking(request(2), KEY)) // 2 rooms, key was used for 1
+                    .isInstanceOf(ConflictException.class)
+                    .hasMessageContaining("different request");
+            verifyNoInteractions(inventoryRepository);
+        }
+
+        @Test
+        void aKeyWhoseBookingIsNotLinkedYetIsReportedAsStillProcessing() {
+            when(idempotencyKeyRepository.claim(eq(1L), eq(KEY), anyString(), any(LocalDateTime.class))).thenReturn(0);
+            when(idempotencyKeyRepository.findByUserIdAndIdempotencyKey(1L, KEY))
+                    .thenReturn(Optional.of(storedKey(BookingServiceImpl.fingerprint(request(2)), null)));
+
+            assertThatThrownBy(() -> bookingService.initialiseBooking(request(2), KEY))
+                    .isInstanceOf(ConflictException.class)
+                    .hasMessageContaining("still being processed");
+        }
+
+        @Test
+        void withoutAKeyTheIdempotencyTableIsNeverTouched() {
+            stubSuccessfulBooking();
+
+            bookingService.initialiseBooking(request(2), null);
+
+            verifyNoInteractions(idempotencyKeyRepository);
+        }
+
+        @Test
+        void sameRequestsHaveTheSameFingerprintAndDifferentOnesDoNot() {
+            assertThat(BookingServiceImpl.fingerprint(request(2))).isEqualTo(BookingServiceImpl.fingerprint(request(2)));
+            assertThat(BookingServiceImpl.fingerprint(request(2))).isNotEqualTo(BookingServiceImpl.fingerprint(request(1)));
         }
     }
 

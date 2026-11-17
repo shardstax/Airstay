@@ -11,7 +11,15 @@ import java.util.List;
 
 public interface BookingService {
 
-    BookingDto initialiseBooking(BookingRequest bookingRequest);
+    /** The booking, and whether it is an earlier booking returned again because the Idempotency-Key was repeated. */
+    record BookingInitResult(BookingDto booking, boolean replayed) {
+    }
+
+    /**
+     * Holds rooms for a stay. With an idempotency key (may be null) a repeated request returns the booking the first
+     * one created instead of booking again.
+     */
+    BookingInitResult initialiseBooking(BookingRequest bookingRequest, String idempotencyKey);
 
     BookingDto addGuests(Long bookingId, List<Long> guestIdList);
 

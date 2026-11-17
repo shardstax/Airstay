@@ -27,6 +27,8 @@ public class CorsConfig {
                 .toList());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Idempotency-Key"));
+        // Response headers a browser frontend is allowed to read (otherwise cross-origin JavaScript cannot see them).
+        config.setExposedHeaders(List.of("Retry-After", "Idempotent-Replayed"));
         config.setAllowCredentials(true); // needed for the httpOnly refresh-token cookie
         config.setMaxAge(3600L);
 

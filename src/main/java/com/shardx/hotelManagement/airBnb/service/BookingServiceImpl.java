@@ -28,8 +28,12 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.*;
 import java.time.temporal.ChronoUnit;
+import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -58,6 +62,7 @@ public class BookingServiceImpl implements BookingService {
     private final CheckoutService checkoutService;
     private final PricingService pricingService;
     private final Clock clock;
+    private final IdempotencyKeyRepository idempotencyKeyRepository;
 
     @Value("${frontend.url}")
     private String frontendUrl;
@@ -76,7 +81,29 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
-    public BookingDto initialiseBooking(BookingRequest bookingRequest) {
+    public BookingInitResult initialiseBooking(BookingRequest bookingRequest, String idempotencyKey) {
+        User user = getCurrentUser();
+        IdempotencyKey claimedKey = null;
+        if (idempotencyKey != null) {
+            String requestFingerprint = fingerprint(bookingRequest);
+            if (idempotencyKeyRepository.claim(user.getId(), idempotencyKey, requestFingerprint, now()) == 0) {
+                return replay(user, idempotencyKey, requestFingerprint);
+            }
+            claimedKey = idempotencyKeyRepository.findByUserIdAndIdempotencyKey(user.getId(), idempotencyKey)
+                    .orElseThrow(() -> new IllegalStateException("Idempotency key vanished right after it was claimed"));
+        }
+
+        BookingDto booking = createBooking(bookingRequest);
+
+        if (claimedKey != null) {
+            // Same transaction as the booking: the key and the booking are saved together or not at all. If creating
+            // the booking failed above (sold out, ...), this transaction rolls back and the key is free to be retried.
+            claimedKey.setBookingId(booking.getId());
+        }
+        return new BookingInitResult(booking, false);
+    }
+
+    private BookingDto createBooking(BookingRequest bookingRequest) {
         log.info("Initialising booking for hotel: {}, room: {}, stay {} to {}", bookingRequest.getHotelId(),
                 bookingRequest.getRoomId(), bookingRequest.getCheckInDate(), bookingRequest.getCheckOutDate());
 
@@ -395,6 +422,36 @@ public class BookingServiceImpl implements BookingService {
                 }
             }
         });
+    }
+
+    /**
+     * The key was already used by this user: return the booking it created (as it is now), or refuse if this is not
+     * the same request. By the time we get here any concurrent first attempt has committed (the claim waits for it).
+     */
+    private BookingInitResult replay(User user, String idempotencyKey, String requestFingerprint) {
+        IdempotencyKey existing = idempotencyKeyRepository.findByUserIdAndIdempotencyKey(user.getId(), idempotencyKey)
+                .orElseThrow(() -> new ConflictException("Idempotency-Key was just released, please retry"));
+        if (!existing.getRequestHash().equals(requestFingerprint)) {
+            throw new ConflictException("This Idempotency-Key was already used with a different request");
+        }
+        if (existing.getBookingId() == null) {
+            throw new ConflictException("A request with this Idempotency-Key is still being processed");
+        }
+        Booking booking = bookingRepository.findById(existing.getBookingId()).orElseThrow(() ->
+                new ResourceNotFoundException("Booking not found with id: " + existing.getBookingId()));
+        return new BookingInitResult(toDto(booking), true);
+    }
+
+    /** SHA-256 of everything that makes one booking request different from another. */
+    static String fingerprint(BookingRequest request) {
+        String canonical = request.getHotelId() + "|" + request.getRoomId() + "|" + request.getCheckInDate()
+                + "|" + request.getCheckOutDate() + "|" + request.getRoomsCount();
+        try {
+            return HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(canonical.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is always available", e);
+        }
     }
 
     private Booking lockOwnedBooking(Long bookingId) {
