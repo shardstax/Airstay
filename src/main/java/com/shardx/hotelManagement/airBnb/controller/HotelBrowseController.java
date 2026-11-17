@@ -1,8 +1,8 @@
 package com.shardx.hotelManagement.airBnb.controller;
 
 import com.shardx.hotelManagement.airBnb.dto.*;
+import com.shardx.hotelManagement.airBnb.service.CachedHotelSearch;
 import com.shardx.hotelManagement.airBnb.service.HotelService;
-import com.shardx.hotelManagement.airBnb.service.InventoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class HotelBrowseController {
 
-    private final InventoryService inventoryService;
+    private final CachedHotelSearch cachedHotelSearch;
     private final HotelService hotelService;
 
     @GetMapping("/search")
@@ -26,7 +26,7 @@ public class HotelBrowseController {
             @Valid @ParameterObject @ModelAttribute HotelSearchRequest hotelSearchRequest) {
         // PagedModel has a documented, stable JSON shape: { content: [...], page: { size, number, totalElements,
         // totalPages } }. Returning Spring Data's Page directly leaves the shape unspecified (and logs a warning).
-        return ResponseEntity.ok(new PagedModel<>(inventoryService.searchHotels(hotelSearchRequest)));
+        return ResponseEntity.ok(new PagedModel<>(cachedHotelSearch.search(hotelSearchRequest)));
     }
 
     @GetMapping("/{hotelId}/info")
