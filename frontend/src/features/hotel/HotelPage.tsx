@@ -1,8 +1,9 @@
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
-import { ApiRequestError } from '@/shared/api/errors';
+import { ApiRequestError, describeRequestError } from '@/shared/api/errors';
 import { formatDate, pluralize } from '@/shared/lib/format';
 import { nightsBetween, parseStay, type Stay, stayToParams } from '@/shared/lib/stay';
+import { useSession } from '@/shared/session/session';
 import { Badge } from '@/shared/ui/Badge';
 import { Button } from '@/shared/ui/Button';
 import { EmptyState } from '@/shared/ui/EmptyState';
@@ -11,6 +12,7 @@ import { Skeleton } from '@/shared/ui/Skeleton';
 
 import { RoomOfferCard } from './RoomOfferCard';
 import { useHotelInfo } from './useHotelInfo';
+import { useReserveRoom } from './useReserveRoom';
 
 export function HotelPage() {
   const { hotelId: hotelIdParam } = useParams();
@@ -44,7 +46,20 @@ function HomeLink() {
 
 function HotelDetails({ hotelId, stay }: { hotelId: number; stay: Stay }) {
   const info = useHotelInfo(hotelId, stay);
+  const reserve = useReserveRoom();
+  const { user } = useSession();
+  const navigate = useNavigate();
+  const location = useLocation();
   const nights = nightsBetween(stay.startDate, stay.endDate);
+
+  // Holding a room needs an account: send visitors to sign in and bring them back to this page afterwards.
+  const reserveRoom = (roomId: number) => {
+    if (!user) {
+      void navigate('/login', { state: { from: `${location.pathname}${location.search}` } });
+      return;
+    }
+    reserve.mutate({ hotelId, roomId, stay });
+  };
 
   if (info.isPending) {
     return (
@@ -82,7 +97,8 @@ function HotelDetails({ hotelId, stay }: { hotelId: number; stay: Stay }) {
   const photo = hotel.photos?.[0];
   const amenities = hotel.amenities ?? [];
   const address = hotel.contactInfo?.address;
-  const backToResults = `/search?${new URLSearchParams({ city: hotel.city, ...Object.fromEntries(stayToParams(stay)) }).toString()}`;
+  // The server always sends the city (the place label), but its type is optional as the field is read-only in requests.
+  const backToResults = `/search?${new URLSearchParams({ ...(hotel.city ? { city: hotel.city } : {}), ...Object.fromEntries(stayToParams(stay)) }).toString()}`;
 
   return (
     <article className="flex flex-col gap-8">
@@ -115,6 +131,12 @@ function HotelDetails({ hotelId, stay }: { hotelId: number; stay: Stay }) {
           {pluralize(stay.rooms, 'room')}
         </p>
 
+        {reserve.isError ? (
+          <p role="alert" className="mt-4 rounded-lg bg-danger-bg px-3 py-2 text-sm text-danger">
+            {describeRequestError(reserve.error)}
+          </p>
+        ) : null}
+
         {rooms.length === 0 ? (
           <div className="mt-4">
             <EmptyState
@@ -130,7 +152,15 @@ function HotelDetails({ hotelId, stay }: { hotelId: number; stay: Stay }) {
           <ul className="mt-4 flex flex-col gap-4">
             {rooms.map((room) => (
               <li key={room.id}>
-                <RoomOfferCard room={room} nights={nights} rooms={stay.rooms} />
+                <RoomOfferCard
+                  room={room}
+                  nights={nights}
+                  rooms={stay.rooms}
+                  busy={reserve.isPending && reserve.variables.roomId === room.id}
+                  onReserve={() => {
+                    reserveRoom(room.id);
+                  }}
+                />
               </li>
             ))}
           </ul>

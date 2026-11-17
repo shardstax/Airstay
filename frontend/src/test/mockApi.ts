@@ -16,6 +16,8 @@ export interface RecordedCall {
   key: string;
   authorization: string | null;
   body: unknown;
+  /** The request headers, e.g. to check the Idempotency-Key. */
+  headers: Headers;
   /** The query string, e.g. `city=Pune&page=0`. */
   query: URLSearchParams;
 }
@@ -38,6 +40,7 @@ export function mockApi(routes: Record<string, Handler>) {
       key,
       authorization: request.headers.get('authorization'),
       query: new URL(request.url).searchParams,
+      headers: request.headers,
       body: text ? (JSON.parse(text) as unknown) : undefined,
     });
 

@@ -1,4 +1,4 @@
-import { ApiRequestError, errorMessage, toRequestError } from './errors';
+import { ApiRequestError, describeRequestError, errorMessage, toRequestError } from './errors';
 
 describe('errorMessage', () => {
   it('uses the server message', () => {
@@ -28,5 +28,21 @@ describe('toRequestError', () => {
     expect(error).toBeInstanceOf(ApiRequestError);
     expect(error.status).toBe(409);
     expect(error.message).toBe('Email already registered');
+  });
+});
+
+describe('describeRequestError', () => {
+  it('keeps the server wording', () => {
+    expect(
+      describeRequestError(new ApiRequestError(409, 'Room is not available for the selected dates')),
+    ).toBe('Room is not available for the selected dates');
+  });
+
+  it('explains rate limiting', () => {
+    expect(describeRequestError(new ApiRequestError(429, 'Too many requests'))).toMatch(/too many attempts/i);
+  });
+
+  it('says the server is unreachable when there was no answer at all', () => {
+    expect(describeRequestError(new TypeError('Failed to fetch'))).toMatch(/could not reach the server/i);
   });
 });

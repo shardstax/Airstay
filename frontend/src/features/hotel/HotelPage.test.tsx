@@ -3,8 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { Route, Routes } from 'react-router-dom';
 
 import { addDays, today } from '@/shared/lib/stay';
-import { mockApi } from '@/test/mockApi';
-import { renderRoute } from '@/test/renderRoute';
+import { ada, mockApi, rememberPreviousSession } from '@/test/mockApi';
+import { renderRoute, Where } from '@/test/renderRoute';
 
 import { HotelPage } from './HotelPage';
 
@@ -26,9 +26,12 @@ const room = (id: number, type: string, price: number, amenities: string[] = [])
 
 function renderHotel(route: string) {
   return renderRoute(
-    <Routes>
-      <Route path="/hotels/:hotelId" element={<HotelPage />} />
-    </Routes>,
+    <>
+      <Routes>
+        <Route path="/hotels/:hotelId" element={<HotelPage />} />
+      </Routes>
+      <Where />
+    </>,
     { route },
   );
 }
@@ -161,5 +164,165 @@ describe('the hotel page', () => {
 
     expect(screen.getByRole('heading', { name: 'Hotel not found' })).toBeInTheDocument();
     expect(backend.calls).toHaveLength(0);
+  });
+});
+
+describe('reserving a room', () => {
+  const signedIn = {
+    'POST /auth/refresh': { data: { accessToken: 'token' } },
+    'GET /users/profile': { data: ada },
+  };
+  const offer = { 'GET /hotels/7/info': { data: info([room(3, 'Deluxe', 2500), room(4, 'Suite', 4000)]) } };
+  const reserveButton = (name: string) => screen.findByRole('button', { name: `Reserve ${name}` });
+
+  it('sends a visitor who is not signed in to sign in, and brings them back here afterwards', async () => {
+    const backend = mockApi(offer);
+    const user = userEvent.setup();
+    renderHotel(hotelUrl());
+
+    await user.click(await reserveButton('Deluxe'));
+
+    expect(backend.count('POST /bookings/init')).toBe(0);
+    expect(await screen.findByText('/login')).toBeInTheDocument();
+  });
+
+  it('holds the chosen room for the stay and opens the booking', async () => {
+    rememberPreviousSession();
+    const backend = mockApi({
+      ...offer,
+      ...signedIn,
+      'POST /bookings/init': { status: 201, data: { id: 42 } },
+    });
+    const user = userEvent.setup();
+    renderHotel(hotelUrl(7, 2));
+
+    await user.click(await reserveButton('Suite'));
+
+    expect(await screen.findByTestId('where')).toHaveTextContent('/bookings/42');
+    expect(backend.calls.find((call) => call.key === 'POST /bookings/init')?.body).toEqual({
+      hotelId: 7,
+      roomId: 4,
+      checkInDate: startDate,
+      checkOutDate: endDate,
+      roomsCount: 2,
+    });
+  });
+
+  it('sends an idempotency key so a retry cannot hold a second room', async () => {
+    rememberPreviousSession();
+    const backend = mockApi({
+      ...offer,
+      ...signedIn,
+      'POST /bookings/init': { status: 201, data: { id: 42 } },
+    });
+    const user = userEvent.setup();
+    renderHotel(hotelUrl());
+
+    await user.click(await reserveButton('Deluxe'));
+    await screen.findByText('/bookings/42');
+
+    const key = backend.calls
+      .find((call) => call.key === 'POST /bookings/init')
+      ?.headers.get('idempotency-key');
+    expect(key).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('places one hold even if the button is clicked twice', async () => {
+    rememberPreviousSession();
+    let release: () => void = () => undefined;
+    const backend = mockApi({
+      ...offer,
+      ...signedIn,
+      'POST /bookings/init': () =>
+        new Promise((resolve) => {
+          release = () => {
+            resolve({ status: 201, data: { id: 42 } });
+          };
+        }),
+    });
+    const user = userEvent.setup();
+    renderHotel(hotelUrl());
+
+    const button = await reserveButton('Deluxe');
+    await user.click(button);
+    await user.click(button);
+    release();
+
+    await screen.findByText('/bookings/42');
+    expect(backend.count('POST /bookings/init')).toBe(1);
+  });
+
+  it('says so when someone else took the last room, and allows another try with a fresh key', async () => {
+    rememberPreviousSession();
+    let attempts = 0;
+    const backend = mockApi({
+      ...offer,
+      ...signedIn,
+      'POST /bookings/init': () => {
+        attempts += 1;
+        return attempts === 1
+          ? { status: 409, error: { message: 'Room is not available for the selected dates' } }
+          : { status: 201, data: { id: 42 } };
+      },
+    });
+    const user = userEvent.setup();
+    renderHotel(hotelUrl());
+
+    await user.click(await reserveButton('Deluxe'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Room is not available for the selected dates',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Reserve Deluxe' }));
+    await screen.findByText('/bookings/42');
+
+    const keys = backend.calls
+      .filter((call) => call.key === 'POST /bookings/init')
+      .map((call) => call.headers.get('idempotency-key'));
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).not.toEqual(keys[1]);
+  });
+
+  it('keeps the same key when there was no answer at all, so a lost response cannot cause a duplicate', async () => {
+    rememberPreviousSession();
+    let attempts = 0;
+    const backend = mockApi({
+      ...offer,
+      ...signedIn,
+      'POST /bookings/init': () => {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new TypeError('Failed to fetch');
+        }
+        return { status: 201, data: { id: 42 } };
+      },
+    });
+    const user = userEvent.setup();
+    renderHotel(hotelUrl());
+
+    await user.click(await reserveButton('Deluxe'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/could not reach the server/i);
+    await user.click(screen.getByRole('button', { name: 'Reserve Deluxe' }));
+    await screen.findByText('/bookings/42');
+
+    const keys = backend.calls
+      .filter((call) => call.key === 'POST /bookings/init')
+      .map((call) => call.headers.get('idempotency-key'));
+    expect(keys[0]).toBe(keys[1]);
+  });
+
+  it('explains rate limiting', async () => {
+    rememberPreviousSession();
+    mockApi({
+      ...offer,
+      ...signedIn,
+      'POST /bookings/init': { status: 429, error: { message: 'Too many bookings' } },
+    });
+    const user = userEvent.setup();
+    renderHotel(hotelUrl());
+
+    await user.click(await reserveButton('Deluxe'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/too many attempts/i);
   });
 });

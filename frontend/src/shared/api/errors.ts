@@ -27,3 +27,17 @@ export class ApiRequestError extends Error {
 export function toRequestError(response: Response, error: unknown): ApiRequestError {
   return new ApiRequestError(response.status, errorMessage(error));
 }
+
+/**
+ * Wording for any failed request: a network failure (no answer at all) and rate limiting get their own plain explanation;
+ * anything else keeps the server's own message, which is already written for people.
+ */
+export function describeRequestError(error: unknown): string {
+  if (!(error instanceof ApiRequestError)) {
+    return 'We could not reach the server. Check your connection and try again.';
+  }
+  if (error.status === 429) {
+    return 'Too many attempts. Please wait a minute and try again.';
+  }
+  return error.message;
+}
