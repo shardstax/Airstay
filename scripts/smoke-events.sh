@@ -39,8 +39,9 @@ call() {
 wait_for_email() {
   local recipient="$1" fragment="$2" found
   for _ in $(seq 1 45); do
+    # `|| true`: one failed poll (Mailpit busy) must not abort the script, the next poll tries again.
     found="$(curl -fsS -G "$MAILPIT/api/v1/search" --data-urlencode "query=to:$recipient" |
-      json "(o.messages||[]).filter(m=>m.Subject.includes('$fragment')).map(m=>m.ID)[0]||''")"
+      json "(o.messages||[]).filter(m=>m.Subject.includes('$fragment')).map(m=>m.ID)[0]||''" || true)"
     if [ -n "$found" ]; then echo "$found"; return 0; fi
     sleep 2
   done
@@ -107,9 +108,10 @@ check_confirmation_email() {
   local message_id body
   message_id="$(wait_for_email "$GUEST" "confirmed")"
   body="$(curl -fsS "$MAILPIT/api/v1/message/$message_id" | json 'o.Text')"
-  echo "$body" | grep -q "Booking:    #$BOOKING" || { echo "FAIL: e-mail does not mention booking #$BOOKING" >&2; return 1; }
-  echo "$body" | grep -q "Smoke Test Hotel $RUN" || { echo "FAIL: e-mail does not mention the hotel" >&2; return 1; }
-  echo "$body" | grep -q "Amount:     INR 5000.00" || { echo "FAIL: e-mail has the wrong amount" >&2; return 1; }
+  # here-strings instead of `echo | grep -q`: with pipefail, grep -q closing the pipe early could look like a failure
+  grep -q "Booking:    #$BOOKING" <<<"$body" || { echo "FAIL: e-mail does not mention booking #$BOOKING" >&2; return 1; }
+  grep -q "Smoke Test Hotel $RUN" <<<"$body" || { echo "FAIL: e-mail does not mention the hotel" >&2; return 1; }
+  grep -q "Amount:     INR 5000.00" <<<"$body" || { echo "FAIL: e-mail has the wrong amount" >&2; return 1; }
 }
 
 cancel_booking() {
