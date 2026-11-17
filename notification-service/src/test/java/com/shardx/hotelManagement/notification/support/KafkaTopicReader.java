@@ -27,19 +27,17 @@ public final class KafkaTopicReader {
 
     /** The first message (value) on the topic that matches, polling until the timeout. */
     public Optional<String> awaitRecord(String topic, Predicate<String> match, Duration timeout) {
-        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(Map.<String, Object>of(
-                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
-                ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false,
-                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class,
-                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class))) {
+        return findRecord(topic, match, timeout).map(ConsumerRecord::value);
+    }
 
-            List<PartitionInfo> partitionInfos = consumer.partitionsFor(topic);
-            if (partitionInfos == null || partitionInfos.isEmpty()) {
+    /** Same, but the whole record, so a test can look at its timestamp. */
+    public Optional<ConsumerRecord<String, String>> findRecord(String topic, Predicate<String> match,
+                                                              Duration timeout) {
+        try (KafkaConsumer<String, String> consumer = newConsumer()) {
+            List<TopicPartition> partitions = partitionsOf(consumer, topic);
+            if (partitions.isEmpty()) {
                 return Optional.empty();
             }
-            List<TopicPartition> partitions = partitionInfos.stream()
-                    .map(info -> new TopicPartition(topic, info.partition()))
-                    .toList();
             consumer.assign(partitions);
             consumer.seekToBeginning(partitions);
 
@@ -47,11 +45,37 @@ public final class KafkaTopicReader {
             while (System.nanoTime() < deadline) {
                 for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(250))) {
                     if (match.test(record.value())) {
-                        return Optional.of(record.value());
+                        return Optional.of(record);
                     }
                 }
             }
             return Optional.empty();
         }
+    }
+
+    /**
+     * Whether the topic exists. A test that says "nothing is in topic X" must check this first, otherwise renaming
+     * the topic would make the test pass without proving anything.
+     */
+    public boolean topicExists(String topic) {
+        try (KafkaConsumer<String, String> consumer = newConsumer()) {
+            return !partitionsOf(consumer, topic).isEmpty();
+        }
+    }
+
+    private KafkaConsumer<String, String> newConsumer() {
+        return new KafkaConsumer<>(Map.<String, Object>of(
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
+                ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false,
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class,
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class));
+    }
+
+    private static List<TopicPartition> partitionsOf(KafkaConsumer<String, String> consumer, String topic) {
+        List<PartitionInfo> infos = consumer.partitionsFor(topic);
+        if (infos == null) {
+            return List.of();
+        }
+        return infos.stream().map(info -> new TopicPartition(topic, info.partition())).toList();
     }
 }

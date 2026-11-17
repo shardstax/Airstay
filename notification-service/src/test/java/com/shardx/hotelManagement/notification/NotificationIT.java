@@ -167,6 +167,7 @@ class NotificationIT {
 
         assertThat(reader().awaitRecord(DEAD_LETTER_TOPIC, garbage::equals, WAIT)).isPresent();
         awaitMarkerAfter(bookingId);
+        assertThat(reader().topicExists(RETRY_TOPIC_0)).as("the retry topic must exist for this check to mean anything").isTrue();
         assertThat(reader().awaitRecord(RETRY_TOPIC_0, garbage::equals, Duration.ofSeconds(2)))
                 .as("a hopeless message must skip the retry topics").isEmpty();
     }
@@ -182,6 +183,7 @@ class NotificationIT {
 
         assertThat(reader().awaitRecord(DEAD_LETTER_TOPIC, value -> value.contains(eventId), WAIT)).isPresent();
         awaitMarkerAfter(bookingId);
+        assertThat(reader().topicExists(RETRY_TOPIC_0)).as("the retry topic must exist for this check to mean anything").isTrue();
         assertThat(reader().awaitRecord(RETRY_TOPIC_0, value -> value.contains(eventId), Duration.ofSeconds(2)))
                 .isEmpty();
     }
@@ -224,13 +226,19 @@ class NotificationIT {
             // While that message is waiting for its next attempt, other messages still flow through the consumer.
             String garbage = "garbage while retrying " + UUID.randomUUID();
             publish(nextBookingId(), garbage);
-            assertThat(reader().awaitRecord(DEAD_LETTER_TOPIC, garbage::equals, WAIT)).isPresent();
-            assertThat(reader().awaitRecord(DEAD_LETTER_TOPIC, value -> value.contains(eventId), Duration.ofMillis(500)))
-                    .as("the failing event is still being retried, not dead-lettered yet").isEmpty();
+            var garbageInDeadLetters = reader().findRecord(DEAD_LETTER_TOPIC, garbage::equals, WAIT);
+            assertThat(garbageInDeadLetters).isPresent();
 
-            // After every attempt failed it lands in the dead-letter topic, and no e-mail was sent.
-            assertThat(reader().awaitRecord(DEAD_LETTER_TOPIC, value -> value.contains(eventId), WAIT)).isPresent();
+            // After every attempt failed the failing event lands in the dead-letter topic too, and no e-mail was sent.
+            var failedInDeadLetters = reader().findRecord(DEAD_LETTER_TOPIC, value -> value.contains(eventId), WAIT);
+            assertThat(failedInDeadLetters).isPresent();
             assertThat(emailsTo(guest)).isEmpty();
+
+            // Not blocked: the hopeless message, published AFTER the failing one, was dead-lettered BEFORE it. Comparing
+            // the broker's record timestamps proves the order without depending on how fast the test itself runs.
+            assertThat(garbageInDeadLetters.get().timestamp())
+                    .as("a message sent while another one was retrying must not wait for that one")
+                    .isLessThan(failedInDeadLetters.get().timestamp());
         } finally {
             smtp.setPort(SMTP_PORT);
         }
