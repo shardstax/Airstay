@@ -91,6 +91,43 @@ services:
       start_period: 40s
     restart: unless-stopped
 
+  # A fake mail server with a web inbox: every e-mail the notification service sends lands here, never on the Internet.
+  # Web UI: http://localhost:8025 (SMTP on 1025 is only reachable by the other containers).
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    ports:
+      - "127.0.0.1:8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # A second, independent deployable (notification-service/). It reads booking events from Kafka and e-mails the
+  # guest through Mailpit. It never calls the API; if it is stopped, bookings are unaffected and its events wait in Kafka.
+  notification-service:
+    build: ./notification-service
+    image: airstay-notification-service:local
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_HOST: redis
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 40s
+    restart: unless-stopped
+
   # Forwards Stripe test-mode webhooks to the app. Copy the "whsec_..." secret it prints into .env
   # as STRIPE_WEBHOOK_SECRET, then restart the app.
   stripe-cli:
