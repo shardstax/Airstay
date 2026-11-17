@@ -198,7 +198,9 @@ describe('reserving a room', () => {
 
     await user.click(await reserveButton('Suite'));
 
-    expect(await screen.findByTestId('where')).toHaveTextContent('/bookings/42');
+    await vi.waitFor(() => {
+      expect(screen.getByTestId('where')).toHaveTextContent('/bookings/42');
+    });
     expect(backend.calls.find((call) => call.key === 'POST /bookings/init')?.body).toEqual({
       hotelId: 7,
       roomId: 4,

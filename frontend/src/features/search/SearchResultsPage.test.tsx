@@ -313,8 +313,11 @@ describe('the search form', () => {
     await user.selectOptions(screen.getByLabelText('Rooms'), '3');
     await user.click(screen.getByRole('button', { name: 'Search' }));
 
-    const where = await screen.findByTestId('where');
-    expect(where).toHaveTextContent('/search?');
+    // The location display exists from the start (showing '/'), so wait until it has actually moved.
+    await vi.waitFor(() => {
+      expect(screen.getByTestId('where')).toHaveTextContent('/search?');
+    });
+    const where = screen.getByTestId('where');
     const params = new URLSearchParams(where.textContent.split('?')[1]);
     expect(params.get('city')).toBe('Panaji, Goa, India');
     expect(params.get('rooms')).toBe('3');
