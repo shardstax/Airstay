@@ -32,3 +32,6 @@ build/
 ### VS Code ###
 .vscode/
 .env
+
+# Raw k6 output (large); the committed summaries are the .md files
+load-tests/results/*.json
