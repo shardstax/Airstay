@@ -1,12 +1,17 @@
 import { Link, Route, Routes } from 'react-router-dom';
-import { HomePage } from './pages/HomePage';
-import { DesignPage } from './pages/DesignPage';
-import { NotFoundPage } from './pages/NotFoundPage';
+
+import { DesignPage } from '@/features/design/DesignPage';
+import { HomePage } from '@/features/home/HomePage';
+
+import { NotFoundPage } from './NotFoundPage';
 
 export function App() {
   return (
     <div className="flex min-h-screen flex-col">
-      <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:rounded-lg focus:bg-white focus:px-3 focus:py-2">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:rounded-lg focus:bg-white focus:px-3 focus:py-2"
+      >
         Skip to content
       </a>
       <header className="border-b border-line bg-white">
@@ -24,7 +29,9 @@ export function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>
-      <footer className="border-t border-line py-6 text-center text-sm text-ink-muted">AirStay, a portfolio project.</footer>
+      <footer className="border-t border-line py-6 text-center text-sm text-ink-muted">
+        AirStay, a portfolio project.
+      </footer>
     </div>
   );
 }

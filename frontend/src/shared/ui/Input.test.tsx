@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+
 import { Button } from './Button';
 import { Input } from './Input';
 
@@ -26,7 +27,11 @@ describe('Input', () => {
 describe('Button', () => {
   it('does not click while loading and says it is busy', async () => {
     const onClick = vi.fn();
-    render(<Button loading onClick={onClick}>Pay</Button>);
+    render(
+      <Button loading onClick={onClick}>
+        Pay
+      </Button>,
+    );
     const button = screen.getByRole('button', { name: 'Pay' });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute('aria-busy', 'true');

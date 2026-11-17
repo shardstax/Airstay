@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+
 import { App } from './App';
 
 function renderAt(path: string) {
@@ -18,7 +19,9 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('App shell', () => {
   it('shows Connected when the API health endpoint answers UP', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ status: 'UP' }), { status: 200 }));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ status: 'UP' }), { status: 200 }),
+    );
     renderAt('/');
     expect(await screen.findByText('Connected')).toBeInTheDocument();
     expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/actuator/health');
@@ -31,7 +34,9 @@ describe('App shell', () => {
   });
 
   it('shows Unreachable when the API answers but is not UP', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ status: 'DOWN' }), { status: 503 }));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ status: 'DOWN' }), { status: 503 }),
+    );
     renderAt('/');
     expect(await screen.findByText('Unreachable')).toBeInTheDocument();
   });

@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from 'node:url';
-import react from '@vitejs/plugin-react';
+
 import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
 // The browser only ever talks to its own origin: /api is proxied to the backend (here in dev, by Nginx in Docker).

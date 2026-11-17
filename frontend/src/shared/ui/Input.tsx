@@ -1,5 +1,6 @@
-import { useId, type InputHTMLAttributes } from 'react';
-import { cn } from '@/lib/cn';
+import { type InputHTMLAttributes, useId } from 'react';
+
+import { cn } from '@/shared/lib/cn';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -14,7 +15,9 @@ export function Input({ label, error, hint, className, id, ...rest }: InputProps
   const describedBy = error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined;
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={inputId} className="text-sm font-medium text-ink">{label}</label>
+      <label htmlFor={inputId} className="text-sm font-medium text-ink">
+        {label}
+      </label>
       <input
         id={inputId}
         aria-invalid={error ? true : undefined}
@@ -27,9 +30,13 @@ export function Input({ label, error, hint, className, id, ...rest }: InputProps
         {...rest}
       />
       {error ? (
-        <p id={`${inputId}-error`} role="alert" className="text-sm text-danger">{error}</p>
+        <p id={`${inputId}-error`} role="alert" className="text-sm text-danger">
+          {error}
+        </p>
       ) : hint ? (
-        <p id={`${inputId}-hint`} className="text-sm text-ink-muted">{hint}</p>
+        <p id={`${inputId}-hint`} className="text-sm text-ink-muted">
+          {hint}
+        </p>
       ) : null}
     </div>
   );

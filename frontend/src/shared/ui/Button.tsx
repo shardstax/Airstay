@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes } from 'react';
-import { cn } from '@/lib/cn';
+
+import { cn } from '@/shared/lib/cn';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -15,11 +16,19 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
 }
 
-export function Button({ variant = 'primary', loading = false, className, children, disabled, type = 'button', ...rest }: ButtonProps) {
+export function Button({
+  variant = 'primary',
+  loading = false,
+  className,
+  children,
+  disabled,
+  type = 'button',
+  ...rest
+}: ButtonProps) {
   return (
     <button
       type={type}
-      disabled={disabled || loading}
+      disabled={loading || disabled === true}
       aria-busy={loading || undefined}
       className={cn(
         'inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed',
@@ -28,7 +37,12 @@ export function Button({ variant = 'primary', loading = false, className, childr
       )}
       {...rest}
     >
-      {loading && <span aria-hidden className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+      {loading && (
+        <span
+          aria-hidden
+          className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+        />
+      )}
       {children}
     </button>
   );
