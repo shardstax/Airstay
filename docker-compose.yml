@@ -22,11 +22,23 @@ services:
       timeout: 3s
       retries: 20
 
+  # A cache and counter store, never the source of truth: no persistence, bounded memory, least-recently-used eviction.
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   app:
     build: .
     image: airstay:local
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     ports:
       - "${APP_PORT:-8080}:8080"
@@ -35,6 +47,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/airstay
       SPRING_DATASOURCE_USERNAME: airstay
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-airstay}
+      REDIS_HOST: redis
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-development-only-secret-change-me-0123456789}
       # Without real Stripe test keys everything works except taking payments.
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_not_configured}
