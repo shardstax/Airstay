@@ -6,7 +6,7 @@ const issues = (result: {
 }) => result.error?.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`) ?? [];
 
 describe('signupSchema', () => {
-  const valid = { name: 'Asha Rao', email: 'asha@example.com', password: 'correct horse' };
+  const valid = { name: 'Asha Rao', email: 'asha@example.com', password: 'correct horse', manager: false };
 
   it('accepts a valid sign-up', () => {
     expect(signupSchema.safeParse(valid).success).toBe(true);

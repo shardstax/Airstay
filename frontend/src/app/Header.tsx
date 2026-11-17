@@ -20,6 +20,11 @@ export function Header() {
         <nav aria-label="Account" className="flex items-center gap-2">
           {isLoading ? null : user ? (
             <>
+              {user.roles.includes('HOTEL_MANAGER') ? (
+                <LinkButton to="/manage" variant="ghost" className="text-ink">
+                  Manage hotels
+                </LinkButton>
+              ) : null}
               <LinkButton to="/account" variant="ghost" className="text-ink">
                 {user.name}
               </LinkButton>

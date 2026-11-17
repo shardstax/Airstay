@@ -67,6 +67,16 @@ export function SignupPage() {
           {...register('password')}
         />
 
+        <label className="flex items-start gap-3 text-sm text-ink">
+          <input type="checkbox" className="mt-0.5 size-4 accent-brand-600" {...register('manager')} />
+          <span>
+            I want to list hotels
+            <span className="block text-ink-muted">
+              Creates a hotel manager account. You can still book stays with it.
+            </span>
+          </span>
+        </label>
+
         <Button type="submit" loading={signup.isPending}>
           Create account
         </Button>

@@ -13,6 +13,8 @@ export const signupSchema = z.object({
   name: z.string().trim().min(1, 'Enter your name.').max(100, 'Use at most 100 characters.'),
   email,
   password: z.string().min(8, 'Use at least 8 characters.').max(72, 'Use at most 72 characters.'),
+  // Ticked by someone who wants to list hotels: the account is created as a hotel manager.
+  manager: z.boolean(),
 });
 
 export type LoginValues = z.infer<typeof loginSchema>;

@@ -25,7 +25,10 @@ async function login(values: LoginValues): Promise<SessionUser> {
 }
 
 async function signup(values: SignupValues): Promise<SessionUser> {
-  const { error, response } = await api.POST('/auth/signup', { body: values });
+  const { manager, ...account } = values;
+  const { error, response } = await api.POST('/auth/signup', {
+    body: { ...account, ...(manager ? { accountType: 'HOTEL_MANAGER' as const } : {}) },
+  });
   if (!response.ok) {
     throw toRequestError(response, error);
   }

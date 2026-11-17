@@ -296,3 +296,122 @@ describe('a returning user', () => {
     });
   });
 });
+
+describe('hotel managers', () => {
+  const managerSession = {
+    'POST /auth/refresh': { data: { accessToken: 'restored' } },
+    'GET /users/profile': { data: { ...ada, roles: ['GUEST', 'HOTEL_MANAGER'] } },
+  };
+
+  it('see a link to manage their hotels, and guests do not', async () => {
+    rememberPreviousSession();
+    mockApi(managerSession);
+    const { unmount } = renderRoute(<App />, { route: '/design' });
+
+    expect(await screen.findByRole('link', { name: 'Manage hotels' })).toHaveAttribute('href', '/manage');
+    unmount();
+
+    rememberPreviousSession();
+    mockApi(restorableSession);
+    renderRoute(<App />, { route: '/design' });
+    await screen.findByRole('link', { name: 'Ada Lovelace' });
+    expect(screen.queryByRole('link', { name: 'Manage hotels' })).not.toBeInTheDocument();
+  });
+
+  it('are taken to their hotels', async () => {
+    rememberPreviousSession();
+    mockApi({ ...managerSession, 'GET /admin/hotels': { data: [] } });
+    renderRoute(<App />, { route: '/manage' });
+
+    expect(await screen.findByRole('heading', { name: 'My hotels' })).toBeInTheDocument();
+  });
+
+  it('are told, not silently redirected, when a guest account opens the manager area', async () => {
+    rememberPreviousSession();
+    mockApi(restorableSession);
+    renderRoute(<App />, { route: '/manage' });
+
+    expect(
+      await screen.findByRole('heading', { name: 'This area is for hotel managers' }),
+    ).toBeInTheDocument();
+  });
+
+  it('can be created from the sign-up form, which sends the manager account type', async () => {
+    const backend = mockApi({
+      'POST /auth/refresh': { status: 401, error: { message: 'none' } },
+      'POST /auth/signup': { status: 201, data: ada },
+      ...loginRoutes,
+    });
+    const user = userEvent.setup();
+    renderRoute(<App />, { route: '/signup' });
+
+    await screen.findByRole('heading', { name: 'Create your account' });
+    await user.type(screen.getByLabelText('Full name'), 'Ada Lovelace');
+    await user.type(screen.getByLabelText('Email'), 'ada@example.com');
+    await user.type(screen.getByLabelText('Password'), 'correct horse');
+    await user.click(screen.getByLabelText(/I want to list hotels/));
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+
+    await screen.findByRole('link', { name: 'Ada Lovelace' });
+    expect(backend.calls.find((call) => call.key === 'POST /auth/signup')?.body).toEqual({
+      name: 'Ada Lovelace',
+      email: 'ada@example.com',
+      password: 'correct horse',
+      accountType: 'HOTEL_MANAGER',
+    });
+  });
+
+  it('create an ordinary guest account when the box is left alone', async () => {
+    const backend = mockApi({
+      'POST /auth/refresh': { status: 401, error: { message: 'none' } },
+      'POST /auth/signup': { status: 201, data: ada },
+      ...loginRoutes,
+    });
+    const user = userEvent.setup();
+    renderRoute(<App />, { route: '/signup' });
+
+    await screen.findByRole('heading', { name: 'Create your account' });
+    await user.type(screen.getByLabelText('Full name'), 'Ada Lovelace');
+    await user.type(screen.getByLabelText('Email'), 'ada@example.com');
+    await user.type(screen.getByLabelText('Password'), 'correct horse');
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+
+    await screen.findByRole('link', { name: 'Ada Lovelace' });
+    expect(backend.calls.find((call) => call.key === 'POST /auth/signup')?.body).not.toHaveProperty(
+      'accountType',
+    );
+  });
+});
+
+describe('the account area', () => {
+  it('opens each section from the tabs', async () => {
+    rememberPreviousSession();
+    mockApi({
+      ...restorableSession,
+      'GET /users/myBookings': { data: [] },
+      'GET /users/guests': { data: [] },
+    });
+    const user = userEvent.setup();
+    renderRoute(<App />, { route: '/account' });
+
+    await screen.findByRole('heading', { name: 'Your details' });
+    await user.click(screen.getByRole('link', { name: 'My bookings' }));
+    expect(await screen.findByRole('heading', { name: 'No bookings yet' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Saved guests' }));
+    expect(await screen.findByRole('heading', { name: 'No saved guests' })).toBeInTheDocument();
+  });
+});
+
+describe('every page has a footer crediting the place data', () => {
+  it('links to the sources', async () => {
+    mockApi(noSession);
+    renderRoute(<App />, { route: '/design' });
+
+    expect(await screen.findByRole('link', { name: 'GeoNames' })).toHaveAttribute(
+      'href',
+      'https://www.geonames.org/',
+    );
+    expect(screen.getByRole('link', { name: 'Open-Meteo' })).toBeInTheDocument();
+  });
+});
