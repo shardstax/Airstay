@@ -220,11 +220,11 @@ Flyway creates the schema on first start (`src/main/resources/db/migration`). Hi
 service has 61 (52 unit + 9 integration, **97.8%** line coverage). Coverage was measured with JaCoCo on 2026-11-17; re-measure
 before quoting it.
 
-**Real Stripe sandbox check (2026-11-17, scripted with Playwright, not part of the automated suite):** against the Docker stack with a Stripe
+**Real Stripe sandbox check (2026-11-17, Playwright script in `e2e/`, not part of the automated suite):** against the Docker stack with a Stripe
 test-mode key and the Stripe CLI forwarding real webhooks, a booking was paid on Stripe's hosted checkout with the test card 4242 4242 4242 4242
 (webhook verified, booking CONFIRMED), cancelled (a real refund of INR 4,000 succeeded through the Kafka refund worker, and the cancellation and
 refund e-mails arrived), a declined card (4000 0000 0000 0002) left the booking in PAYMENTS_PENDING, and expiring that checkout session released
-the booking as EXPIRED. Only test-mode keys were used. The scripts are not in the repository.
+the booking as EXPIRED. Only test-mode keys were used. Repeatable: [`e2e/`](e2e/README.md) (it passed all 8 steps headless in Docker on 2026-11-17).
 
 - **Unit tests** (`*Test`, JUnit 5 + Mockito): every pricing rule and how they stack, JWT type and
   tamper checks, the booking state machine (holds, guests, payment, webhook idempotency, refunds

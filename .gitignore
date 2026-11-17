@@ -38,3 +38,8 @@ load-tests/results/*.json
 load-tests/results/.samples-*
 load-tests/results/.docker-stats-*
 !load-tests/results/*.summary.json
+
+# e2e run artifacts (the script installs Playwright in the Docker container, which writes here)
+e2e/node_modules/
+e2e/package.json
+e2e/package-lock.json
