@@ -16,9 +16,14 @@ import org.springframework.kafka.annotation.RetryableTopic;
 import org.springframework.kafka.retrytopic.DltStrategy;
 import org.springframework.kafka.retrytopic.TopicSuffixingStrategy;
 import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.mail.MailParseException;
 import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.stereotype.Component;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Sends an e-mail for every booking event.
@@ -39,6 +44,7 @@ import org.springframework.stereotype.Component;
 public class BookingEventListener {
 
     private static final Logger log = LoggerFactory.getLogger(BookingEventListener.class);
+    private static final Pattern EVENT_ID = Pattern.compile("\"eventId\"\\s*:\\s*\"([^\"\\\\]{1,64})\"");
 
     private final EventParser parser;
     private final EmailComposer composer;
@@ -59,7 +65,8 @@ public class BookingEventListener {
                     delayExpression = "${airstay.notifications.retry-delay-ms}",
                     multiplierExpression = "${airstay.notifications.retry-multiplier}",
                     maxDelayExpression = "${airstay.notifications.retry-max-delay-ms}"),
-            exclude = MalformedEventException.class,
+            // MailParseException: the address itself is invalid, which no number of retries can fix.
+            exclude = {MalformedEventException.class, MailParseException.class},
             retryTopicSuffix = ".notifications.retry",
             dltTopicSuffix = ".notifications.DLT",
             dltStrategy = DltStrategy.FAIL_ON_ERROR,
@@ -67,7 +74,7 @@ public class BookingEventListener {
             numPartitions = "3",
             replicationFactor = "1")
     @KafkaListener(topics = Topics.BOOKING_EVENTS, groupId = "airstay-notifications")
-    public void onBookingEvent(String payload) {
+    public void onBookingEvent(@Payload(required = false) String payload) {
         BookingEvent event = parser.parse(payload);
 
         if (!EventTypes.isNotifiable(event.type())) {
@@ -85,11 +92,26 @@ public class BookingEventListener {
         log.info("Sent {} e-mail for booking {} (event {})", event.type(), event.bookingId(), event.eventId());
     }
 
-    /** Every attempt failed (or the message was hopeless): nothing more happens automatically. */
+    /**
+     * Every attempt failed (or the message was hopeless): nothing more happens automatically.
+     *
+     * <p>Logs the event id and the kind of error only. The message itself stays in the dead-letter topic (see
+     * docs/events.md for how to read it) and is NOT logged, because it holds the guest's e-mail address; the exception
+     * text is not logged either, because mail errors often quote the recipient.
+     */
     @DltHandler
-    public void onGaveUp(String payload,
-                         @Header(name = KafkaHeaders.EXCEPTION_MESSAGE, required = false) String reason) {
-        log.error("NOTIFICATION_DEAD_LETTER: an event could not be e-mailed and needs a look. Reason: {}. Message: {}",
-                reason, payload);
+    public void onGaveUp(@Payload(required = false) String payload,
+                         @Header(name = KafkaHeaders.EXCEPTION_FQCN, required = false) String errorType) {
+        log.error("NOTIFICATION_DEAD_LETTER: an event could not be e-mailed and needs a look. eventId={}, error={}. "
+                + "The message is in the topic airstay.booking-events.notifications.DLT.", eventIdOf(payload), errorType);
+    }
+
+    /** The event id, if the message has one that can be read without a JSON parser (the message may be garbage). */
+    private static String eventIdOf(String payload) {
+        if (payload == null) {
+            return "unknown";
+        }
+        Matcher matcher = EVENT_ID.matcher(payload);
+        return matcher.find() ? matcher.group(1) : "unknown";
     }
 }

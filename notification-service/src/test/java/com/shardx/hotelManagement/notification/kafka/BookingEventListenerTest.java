@@ -1,5 +1,8 @@
 package com.shardx.hotelManagement.notification.kafka;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.shardx.hotelManagement.notification.event.EventParser;
 import com.shardx.hotelManagement.notification.event.MalformedEventException;
@@ -14,9 +17,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.mail.MailSendException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -90,6 +95,39 @@ class BookingEventListenerTest {
         assertThatThrownBy(() -> listener.onBookingEvent("not json")).isInstanceOf(MalformedEventException.class);
 
         verifyNoInteractions(sender, processedEvents);
+    }
+
+    @Test
+    void aKafkaTombstoneWithNoContentIsMalformedNotACrash() {
+        assertThatThrownBy(() -> listener.onBookingEvent(null)).isInstanceOf(MalformedEventException.class);
+
+        verifyNoInteractions(sender, processedEvents);
+    }
+
+    @Test
+    void theDeadLetterHandlerLogsTheEventIdButNeverTheMessageWithItsEmailAddress() {
+        Logger logger = (Logger) LoggerFactory.getLogger(BookingEventListener.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            listener.onGaveUp(confirmed("evt-77"), "org.springframework.mail.MailSendException");
+
+            assertThat(appender.list).hasSize(1);
+            assertThat(appender.list.get(0).getFormattedMessage())
+                    .contains("evt-77")
+                    .contains("MailSendException")
+                    .doesNotContain("asha@example.com")
+                    .doesNotContain("Asha");
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
+    @Test
+    void theDeadLetterHandlerSurvivesAMessageWithoutContent() {
+        assertThatCode(() -> listener.onGaveUp(null, null)).doesNotThrowAnyException();
+        assertThatCode(() -> listener.onGaveUp("not json", null)).doesNotThrowAnyException();
     }
 
     @Test
