@@ -35,3 +35,5 @@ build/
 
 # Raw k6 output (large); the committed summaries are the .md files
 load-tests/results/*.json
+load-tests/results/.samples-*
+load-tests/results/.docker-stats-*
