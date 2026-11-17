@@ -7,7 +7,7 @@ time-limited room holds, layered dynamic pricing and Stripe Checkout payments.
 
 ## Tech stack
 
-Java 21 · Spring Boot 3.5 · Spring Data JPA (Hibernate) · Spring Security + JWT · PostgreSQL · Redis · Flyway ·
+Java 21 · Spring Boot 3.5 · Spring Data JPA (Hibernate) · Spring Security + JWT · PostgreSQL · Redis · Kafka · Flyway ·
 Stripe Checkout + webhooks · Bean Validation · springdoc OpenAPI · JUnit 5 · Mockito · Testcontainers ·
 JaCoCo · k6 · GitHub Actions · Docker · Docker Compose · Spring Boot Actuator
 
@@ -84,29 +84,82 @@ Redis is an **optional accelerator**, never the source of truth. PostgreSQL deci
 - Settings: `SEARCH_CACHE_ENABLED`, `RATE_LIMIT_ENABLED`, `REDIS_HOST`, `REDIS_PORT` (see `.env.example`).
   Measure it yourself with [`load-tests/`](load-tests/README.md) (k6 in Docker, SQL seed for 439,200 inventory rows).
 
+## Kafka: reliable events, refunds and e-mail
+
+**Why Kafka is here (the honest version).** Before, a failed Stripe refund was only logged for someone to retry by hand.
+The standard fix is a **transactional outbox**, and on its own that would already make refunds reliable. Kafka earns its
+place because the same facts have **two independent consumers**: AirStay's own refund worker and a separate notification
+service. Neither needs to know the other exists, and a third consumer would need no change to the booking code.
+
+```
+booking change + outbox row  ──one database transaction──▶  PostgreSQL
+OutboxRelay (every 500 ms)   ──publishes in order; marks a row published only after Kafka acknowledged it──▶  Kafka
+Kafka  ──▶  RefundWorker (in the API)         ──▶  Stripe refund, retried without blocking, then a dead-letter topic
+       ──▶  notification-service (separate)   ──▶  e-mail (Mailpit locally)
+```
+
+- **Outbox.** Every status change (`BOOKING_CONFIRMED`, `BOOKING_CANCELLED`, `BOOKING_EXPIRED`, `REFUND_REQUESTED`,
+  `REFUND_COMPLETED`) is saved in the `outbox_event` table **in the same transaction** as the change itself (the service refuses
+  to run outside a transaction). The relay claims rows with `FOR UPDATE SKIP LOCKED`, publishes in id order and stops at the
+  first failure, so order is kept. Delivery is **at-least-once**: each event has a unique `eventId` and consumers ignore ids
+  they have seen. The contract is [`docs/events.md`](docs/events.md) (only ever add fields).
+- **Refunds.** Cancelling (or a payment arriving for an expired booking) records `BOOKING_CANCELLED` and `REFUND_REQUESTED` with
+  the status change; the request thread no longer calls Stripe. `RefundWorker` retries a failed refund through retry topics
+  (non-blocking: a Stripe outage does not stall other refunds): 6 attempts, delays 10 s, 30 s, 90 s, 270 s, 600 s, then the
+  dead-letter topic `airstay.refund-requests.DLT` with an `ERROR` log. Stripe gets an idempotency key per booking, so repeating a
+  refund that already succeeded changes nothing.
+- **Notification service** ([`notification-service/`](notification-service/), its own Maven project and Docker image; it shares
+  no code with the API, only the event contract). It e-mails the guest for confirmed, cancelled and expired bookings and
+  completed refunds, using only the event's own snapshot (it never calls the API). It is **idempotent** (an e-mailed `eventId` is
+  remembered in Redis, but only after the send succeeded, so a failed send is retried, never lost), **ignores unknown event
+  types and unknown fields** (the API can evolve), sends **malformed events straight to a dead-letter topic**, retries SMTP
+  failures through retry topics (5 attempts, 5 s to 135 s) and then dead-letters to `airstay.booking-events.notifications.DLT`.
+  It never logs e-mail addresses (a test checks the log output).
+
+**What happens when something is down** (each case has an automated test, and the first two were also run live on the Compose stack):
+
+| Down | What happens |
+|---|---|
+| **Kafka** | Bookings, cancellations and webhooks keep working. Events wait in the `outbox_event` table and are published when Kafka returns. Live run: webhook answered `204`, booking `CONFIRMED`, 1 event waited in the outbox and no e-mail was sent; after Kafka came back exactly 1 e-mail arrived and the outbox emptied. |
+| **Notification service** | Bookings are unaffected. Events wait in Kafka; after a restart the e-mail arrives (live run: none while it was down, exactly 1 afterwards). |
+| **Mail server** | The message moves through the retry topics (other messages are not blocked), then to the dead-letter topic. |
+| **Redis** | The notification service may send a duplicate if an event is delivered twice; it never loses an e-mail. The API falls back to PostgreSQL (see above). |
+| **Stripe** | The refund is retried for about 17 minutes, then dead-lettered. |
+
+**Honest limits.** One Kafka broker without replication (a local setup, not a production cluster); at-least-once, not
+exactly-once (so the consumers are idempotent); ordering is guaranteed per booking only; e-mail amounts are shown in INR because
+the contract has no currency field yet; the e-mails are plain text; a dead-lettered message needs a person (read it with the
+commands in [`docs/events.md`](docs/events.md)). No throughput or latency numbers are claimed for Kafka: none were measured.
+
+Look at it: `docker compose up --build -d --wait`, then run [`scripts/smoke-events.sh`](scripts/smoke-events.sh) (it confirms a
+booking with a Stripe webhook signed the way Stripe signs it, then waits for the confirmation e-mail and, after a
+cancellation, the cancellation e-mail) and open the Mailpit inbox at `http://localhost:8025`.
+
 ## Running with Docker (recommended)
 
-Only Docker is required; the Java build happens inside the image.
+Only Docker is required; the Java builds happen inside the images.
 
 ```bash
-docker compose up --build        # PostgreSQL 16 + AirStay, ready when both health checks pass
-docker compose down              # stop (add --volumes to also delete the database)
+docker compose up --build -d --wait   # PostgreSQL 16, Redis 7, Kafka 3.9, Mailpit, the API and the notification service
+docker compose down                   # stop (add --volumes to also delete the database and Kafka data)
 ```
 
 - API: `http://localhost:8080/api/v1` · Swagger UI: `http://localhost:8080/api/v1/swagger-ui.html`
 - Health: `http://localhost:8080/api/v1/actuator/health`
+- E-mails sent by the notification service land in the Mailpit inbox: `http://localhost:8025` (nothing leaves your machine).
 - It starts with local-only defaults. To take test payments, copy `.env.example` to `.env`, add your
   Stripe test key and run `docker compose --profile stripe up --build`. The Stripe CLI container prints a
   `whsec_...` secret: put it in `.env` as `STRIPE_WEBHOOK_SECRET` and restart the app.
 
-The image is a multi-stage build: Maven compiles in a JDK image, the jar is split into layers (code changes
-rebuild only the last layer), and the runtime is a ~150 MB JRE-only Alpine image running as a non-root
-user. Profiles: `dev` (default in compose, debug logs) and `prod` (JSON logs, proxy headers).
+Each image is a multi-stage build: Maven compiles in a JDK image, the jar is split into layers (code changes
+rebuild only the last layer), and the runtime is a JRE-only Alpine image running as a non-root user (API 173 MB,
+notification service 120 MB). Profiles: `dev` (default in compose, debug logs) and `prod` (JSON logs, proxy headers).
 
 ## Running without Docker
 
 Requirements: JDK 21, PostgreSQL 16+ with an empty database, Stripe test keys, optionally the Stripe CLI.
-Docker is only needed for the integration tests.
+Docker is only needed for the integration tests. Redis and Kafka are optional to start the API: without Redis it serves from
+PostgreSQL, and without Kafka the events wait in the outbox table (`EVENTS_ENABLED=false` stops the relay and the refund worker).
 
 ```bash
 cp .env.example .env            # fill in the values
@@ -123,11 +176,14 @@ Flyway creates the schema on first start (`src/main/resources/db/migration`). Hi
 ## Testing
 
 ```bash
-./mvnw test     # unit tests only: fast, no Docker needed
-./mvnw verify   # unit + integration tests (needs Docker) + coverage report in target/site/jacoco
+./mvnw test                                      # API unit tests only: fast, no Docker needed
+./mvnw verify                                    # API unit + integration tests (needs Docker) + coverage in target/site/jacoco
+./mvnw -f notification-service/pom.xml verify    # the notification service (needs Docker for Kafka and Redis)
 ```
 
-**110 automated tests** (63 unit + 47 integration).
+**197 automated tests**, all passing. The API has 136 (78 unit + 58 integration, **71.6%** line coverage) and the notification
+service has 61 (52 unit + 9 integration, **97.8%** line coverage). Coverage was measured with JaCoCo on 2026-11-17; re-measure
+before quoting it.
 
 - **Unit tests** (`*Test`, JUnit 5 + Mockito): every pricing rule and how they stack, JWT type and
   tamper checks, the booking state machine (holds, guests, payment, webhook idempotency, refunds
@@ -144,8 +200,17 @@ Flyway creates the schema on first start (`src/main/resources/db/migration`). Hi
     one booking; a different request or a failed attempt behaves correctly.
   - Redis: a stale cached search never causes an overbooking; the rate limit is shared between two independent
     connections, exactly 10 of 50 simultaneous requests pass, and the window resets.
-- **CI**: GitHub Actions runs `./mvnw verify` on every push and pull request, then builds the Docker image,
-  starts the compose stack and smoke-tests the running API.
+  - Events and refunds: with Kafka paused in the middle of a booking, the booking still works, its event waits in the
+    outbox and arrives when Kafka returns; a refund is retried until Stripe recovers; a refund that never works ends in the
+    dead-letter topic after the configured attempts; an unreadable request goes straight there.
+  - Notification service (real Kafka and Redis, an in-process SMTP server): one e-mail per event with the right content;
+    the same event twice sends one e-mail; unknown types are ignored; hopeless messages go to the dead-letter topic without
+    retries; a failing mail server is retried until it is back, and one that never returns ends in the dead-letter topic without
+    blocking other messages. A contract test parses the example in `docs/events.md`, and a log test checks that e-mail
+    addresses never appear in the logs.
+- **CI**: GitHub Actions runs `./mvnw verify` for the API and for the notification service on every push and pull request,
+  then builds both Docker images, starts the whole compose stack and smoke-tests it, including
+  [`scripts/smoke-events.sh`](scripts/smoke-events.sh) (signed Stripe webhook, outbox, Kafka, e-mail in Mailpit).
 
 ## API overview
 
