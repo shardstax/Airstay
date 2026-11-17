@@ -170,6 +170,13 @@ before and after on the same data. Treat them as ratios, not as production laten
 - Not measured: several app instances, a separate load generator. The load runs use a fake payment provider; real Stripe was checked separately (see Testing).
   Details: [`load-tests/results/phase6-booking-load.md`](load-tests/results/phase6-booking-load.md).
 
+## Frontend
+
+[`frontend/`](frontend/README.md) is a React + strict TypeScript web app (Vite, TanStack Query, Tailwind) in the same repository.
+Its API types are generated from this backend's OpenAPI spec, and CI fails if they drift. It is served by Nginx, which also forwards
+`/api` to the backend, so the browser uses one origin. It is being built in stages; so far: the foundation (typed client, design
+basics, Docker and CI). Open it at <http://localhost:5173> after `docker compose up --build`.
+
 ## Running with Docker (recommended)
 
 Only Docker is required; the Java builds happen inside the images.

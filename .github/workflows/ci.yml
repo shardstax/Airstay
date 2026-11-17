@@ -92,9 +92,42 @@ jobs:
               notification-service/target/site/jacoco/jacoco.csv | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
+  frontend:
+    name: Frontend typecheck, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Strict TypeScript, unit and component tests, then a production build. Whether the generated API types still match the
+      # backend is checked in the docker job below, where a running backend exists.
+      - name: Install, typecheck, test, build
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Bundle size
+        working-directory: frontend
+        run: |
+          echo "Frontend build (JS + CSS, uncompressed / gzip):" | tee -a "$GITHUB_STEP_SUMMARY"
+          for ext in js css; do
+            raw=$(cat dist/assets/*.$ext | wc -c); gz=$(cat dist/assets/*.$ext | gzip -9 | wc -c)
+            echo "- $ext: $raw / $gz bytes" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+
   docker:
     name: Docker images and compose smoke test
-    needs: [build, notification-service]
+    needs: [build, notification-service, frontend]
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -122,6 +155,22 @@ jobs:
       # the outbox and Kafka to the notification service, and the e-mail shows up in Mailpit; then the same for a cancellation.
       - name: Smoke test the event chain (webhook, outbox, Kafka, e-mail)
         run: bash scripts/smoke-events.sh
+
+      # The web app is served by Nginx, which forwards /api to the backend: one origin for the browser.
+      - name: Smoke test the frontend
+        run: |
+          curl -fsS http://localhost:5173/ | grep -q '<div id="root">'
+          curl -fsS http://localhost:5173/api/v1/actuator/health | grep -q '"status":"UP"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5173/design)" = "200"
+          echo "Image size (frontend): $(docker image inspect airstay-frontend:local --format '{{.Size}}' | numfmt --to=iec)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # The API types in frontend/src/api/schema.d.ts are generated from the backend's OpenAPI spec. If the backend changed
+      # and the file was not regenerated, this fails and shows the difference.
+      - name: Check the generated API types are current
+        run: |
+          docker run --rm --network airstay_default -v "$PWD/frontend":/app -w /app \
+            -e OPENAPI_URL=http://app:8080/api/v1/v3/api-docs node:22-alpine \
+            sh -c 'npm ci --no-audit --no-fund && npm run -s api:check'
 
       - name: Logs on failure
         if: failure()
