@@ -135,6 +135,28 @@ Look at it: `docker compose up --build -d --wait`, then run [`scripts/smoke-even
 booking with a Stripe webhook signed the way Stripe signs it, then waits for the confirmation e-mail and, after a
 cancellation, the cancellation e-mail) and open the Mailpit inbox at `http://localhost:8025`.
 
+## Performance: what was measured, and what it does not show
+
+Every number below comes from [`load-tests/`](load-tests/README.md) (k6 and `pg_stat_statements` in Docker, on a laptop), measured
+before and after on the same data. Treat them as ratios, not as production latency.
+
+| Operation | Before | After | Why |
+|---|---|---|---|
+| Search, 100 concurrent users (Redis cache) | 945 searches/s | **2,119 searches/s** (2.24x) | cache-aside, 30 s TTL |
+| Activate a hotel with 4 room types (median) | 1,008 ms | **112 ms** (9.0x) | one `INSERT ... generate_series` instead of 366 per room type, and a set-based price refresh |
+| SQL statements for that activation | 2,282 | **40** (57x fewer) | same |
+| Hourly price refresh, 337 hotels (469,212 inventory rows) | 111.6 s | **6.0 s** (18.7x) | one read and at most two set-based writes per hotel instead of about 370 statements |
+| SQL statements for that refresh | 125,621 | **1,470** (85x fewer) | same |
+
+- **The saving is round trips, not faster SQL:** PostgreSQL's own execution time for the refresh was 3.6 s before and after. The refresh
+  runs in the background, so what improves is database and CPU load and how its duration grows with the number of hotels.
+- **Safe under concurrency:** refreshes of one hotel are serialized by an advisory lock, rows are locked in the same id order the
+  booking code uses, and owner changes refresh after their own transaction commits, so none of them can deadlock with a booking
+  (the concurrency tests still pass: 25 simultaneous requests for the last room give exactly one booking).
+- **Indexes were reviewed with `EXPLAIN` on the real data:** every hot query already uses one; the one unindexed foreign key
+  (`booking.room_id`) was measured (7.7 ms against 0.05 ms at 200,000 bookings) and deliberately left alone.
+- Details, the method and the limits: [`load-tests/results/`](load-tests/results/phase5-activation-and-price-refresh.md).
+
 ## Running with Docker (recommended)
 
 Only Docker is required; the Java builds happen inside the images.
@@ -181,7 +203,7 @@ Flyway creates the schema on first start (`src/main/resources/db/migration`). Hi
 ./mvnw -f notification-service/pom.xml verify    # the notification service (needs Docker for Kafka and Redis)
 ```
 
-**197 automated tests**, all passing. The API has 136 (78 unit + 58 integration, **71.6%** line coverage) and the notification
+**205 automated tests**, all passing. The API has 144 (78 unit + 66 integration, **76.0%** line coverage) and the notification
 service has 61 (52 unit + 9 integration, **97.8%** line coverage). Coverage was measured with JaCoCo on 2026-11-17; re-measure
 before quoting it.
 
@@ -203,6 +225,11 @@ before quoting it.
   - Events and refunds: with Kafka paused in the middle of a booking, the booking still works, its event waits in the
     outbox and arrives when Kafka returns; a refund is retried until Stripe recovers; a refund that never works ends in the
     dead-letter topic after the configured attempts; an unreadable request goes straight there.
+  - Inventory and prices: activating a hotel creates every night once per room type with the room's values; prices follow the
+    rules and the hotel's "from" price is its cheapest room; a refresh rewrites only the rows whose price changed and a second one
+    rewrites none (judged by PostgreSQL's row version); the scheduled refresh repairs corrupted prices across several pages and
+    skips hotels without inventory; a surge change, a room price change and deleting a room show the new prices when the owner's
+    request returns.
   - Notification service (real Kafka and Redis, an in-process SMTP server): one e-mail per event with the right content;
     the same event twice sends one e-mail; unknown types are ignored; hopeless messages go to the dead-letter topic without
     retries; a failing mail server is retried until it is back, and one that never returns ends in the dead-letter topic without
