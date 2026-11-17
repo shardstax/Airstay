@@ -252,7 +252,7 @@ describe('the search form', () => {
 
     await user.click(screen.getByRole('button', { name: 'Search' }));
 
-    expect(await screen.findByText('Enter a city.')).toBeInTheDocument();
+    expect(await screen.findByText('Choose a place from the list.')).toBeInTheDocument();
     expect(screen.getByTestId('where')).toHaveTextContent('/');
   });
 
@@ -288,18 +288,35 @@ describe('the search form', () => {
   });
 
   it('takes the user to the results with the search in the URL', async () => {
-    mockApi({ 'GET /hotels/search': { data: page([hotel(7)]) } });
+    mockApi({
+      'GET /hotels/search': { data: page([hotel(7)]) },
+      'GET /places': {
+        data: [
+          {
+            id: 1272596,
+            name: 'Panaji',
+            region: 'Goa',
+            country: 'India',
+            countryCode: 'IN',
+            latitude: 15,
+            longitude: 73,
+            label: 'Panaji, Goa, India',
+          },
+        ],
+      },
+    });
     const user = userEvent.setup();
     renderSearch('/');
 
-    await fillCity(user, '  Goa ');
+    await fillCity(user, 'Pan');
+    await user.click(await screen.findByRole('option', { name: 'Panaji, Goa, India' }));
     await user.selectOptions(screen.getByLabelText('Rooms'), '3');
     await user.click(screen.getByRole('button', { name: 'Search' }));
 
     const where = await screen.findByTestId('where');
     expect(where).toHaveTextContent('/search?');
     const params = new URLSearchParams(where.textContent.split('?')[1]);
-    expect(params.get('city')).toBe('Goa');
+    expect(params.get('city')).toBe('Panaji, Goa, India');
     expect(params.get('rooms')).toBe('3');
     expect(params.get('startDate')).toBe(addDays(today(), 1));
   });

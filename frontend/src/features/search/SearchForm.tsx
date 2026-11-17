@@ -1,9 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMemo } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 
 import { addDays, MAX_ROOMS, today } from '@/shared/lib/stay';
+import { PlaceCombobox } from '@/shared/places/PlaceCombobox';
 import { Button } from '@/shared/ui/Button';
 import { Card } from '@/shared/ui/Card';
 import { Input } from '@/shared/ui/Input';
@@ -17,7 +18,7 @@ interface SearchFormProps {
 
 const roomOptions = Array.from({ length: MAX_ROOMS }, (_, index) => index + 1);
 
-/** City, dates and rooms. Submitting moves to the results page, with the search in the URL. */
+/** Place, dates and rooms. Submitting moves to the results page, with the search in the URL. */
 export function SearchForm({ defaultValues }: SearchFormProps) {
   const navigate = useNavigate();
   const schema = useMemo(() => searchSchema(), []);
@@ -42,12 +43,22 @@ export function SearchForm({ defaultValues }: SearchFormProps) {
           })(event);
         }}
       >
-        <Input
-          label="City"
-          autoComplete="off"
-          placeholder="Where to?"
-          error={errors.city?.message}
-          {...register('city')}
+        <Controller
+          control={control}
+          name="city"
+          render={({ field }) => (
+            <PlaceCombobox
+              label="City"
+              placeholder="Where to?"
+              name={field.name}
+              value={field.value}
+              onChange={(label) => {
+                field.onChange(label);
+              }}
+              onBlur={field.onBlur}
+              error={errors.city?.message}
+            />
+          )}
         />
         <Input
           label="Check-in"

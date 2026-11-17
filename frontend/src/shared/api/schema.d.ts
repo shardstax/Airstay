@@ -328,6 +328,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search real places (cities, towns, villages) by name, for the search box and the hotel form */
+        get: operations["searchPlaces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/hotels/{hotelId}/info": {
         parameters: {
             query?: never;
@@ -354,6 +371,40 @@ export interface paths {
         };
         /** Search hotels with rooms free on every night of the stay */
         get: operations["searchHotels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The fixed choices for hotel amenities, room amenities and room types */
+        get: operations["getCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bookings/{bookingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One of your bookings, with the hotel name and room type */
+        get: operations["getBooking"];
         put?: never;
         post?: never;
         delete?: never;
@@ -436,7 +487,9 @@ export interface components {
             /** Format: int64 */
             readonly id?: number;
             name: string;
-            city: string;
+            /** Format: int64 */
+            placeId: number;
+            readonly city?: string;
             photos?: string[];
             amenities?: string[];
             contactInfo?: components["schemas"]["HotelContactInfo"];
@@ -462,8 +515,10 @@ export interface components {
             id: number;
             /** Format: int64 */
             hotelId: number;
+            hotelName: string;
             /** Format: int64 */
             roomId: number;
+            roomType: string;
             /** Format: int32 */
             roomsCount: number;
             /** Format: date */
@@ -478,6 +533,8 @@ export interface components {
             expiresAt?: string;
             /** @enum {string} */
             bookingStatus: "RESERVED" | "GUESTS_ADDED" | "PAYMENTS_PENDING" | "CONFIRMED" | "CANCELLED" | "EXPIRED";
+            /** Format: int32 */
+            maxGuests: number;
             guests?: components["schemas"]["GuestDto"][];
             amount: number;
         };
@@ -533,6 +590,19 @@ export interface components {
             surgeFactor: number;
             closed: boolean;
         };
+        PlaceDto: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            region?: string;
+            country: string;
+            countryCode: string;
+            /** Format: double */
+            latitude: number;
+            /** Format: double */
+            longitude: number;
+            label: string;
+        };
         HotelInfoDto: {
             hotel: components["schemas"]["HotelDto"];
             rooms: components["schemas"]["RoomPriceResponseDto"][];
@@ -571,24 +641,29 @@ export interface components {
             content?: components["schemas"]["HotelPriceResponseDto"][];
             page?: components["schemas"]["PageMetadata"];
         };
+        CatalogDto: {
+            hotelAmenities: string[];
+            roomAmenities: string[];
+            roomTypes: string[];
+        };
         BookingStatusResponseDto: {
             /** @enum {string} */
             bookingStatus: "RESERVED" | "GUESTS_ADDED" | "PAYMENTS_PENDING" | "CONFIRMED" | "CANCELLED" | "EXPIRED";
         };
         InventoryDto: {
             /** Format: int64 */
-            id?: number;
+            id: number;
             /** Format: date */
-            date?: string;
+            date: string;
             /** Format: int32 */
-            bookedCount?: number;
+            bookedCount: number;
             /** Format: int32 */
-            reservedCount?: number;
+            reservedCount: number;
             /** Format: int32 */
-            totalCount?: number;
-            surgeFactor?: number;
-            price?: number;
-            closed?: boolean;
+            totalCount: number;
+            surgeFactor: number;
+            price: number;
+            closed: boolean;
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -596,9 +671,9 @@ export interface components {
         };
         HotelReportDto: {
             /** Format: int64 */
-            bookingCount?: number;
-            totalRevenue?: number;
-            avgRevenue?: number;
+            bookingCount: number;
+            totalRevenue: number;
+            avgRevenue: number;
         };
     };
     responses: never;
@@ -1263,6 +1338,28 @@ export interface operations {
             };
         };
     };
+    searchPlaces: {
+        parameters: {
+            query: {
+                query: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PlaceDto"][];
+                };
+            };
+        };
+    };
     getHotelInfo: {
         parameters: {
             query: {
@@ -1316,6 +1413,48 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["PagedModelHotelPriceResponseDto"];
+                };
+            };
+        };
+    };
+    getCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CatalogDto"];
+                };
+            };
+        };
+    };
+    getBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookingId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BookingDto"];
                 };
             };
         };

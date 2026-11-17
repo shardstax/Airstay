@@ -18,7 +18,7 @@ describe('searchSchema', () => {
   });
 
   it('asks for a city', () => {
-    expect(messages({ ...values, city: '   ' })).toEqual(['Enter a city.']);
+    expect(messages({ ...values, city: '   ' })).toEqual(['Choose a place from the list.']);
   });
 
   it('applies the stay rules', () => {

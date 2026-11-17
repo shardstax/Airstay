@@ -8,7 +8,8 @@ export const PAGE_SIZE = 10;
 export function searchSchema(now = new Date()) {
   return z
     .object({
-      city: z.string().trim().min(1, 'Enter a city.').max(255, 'Use at most 255 characters.'),
+      // The label of a place chosen from the picker ("Pune, Maharashtra, India"), never free text.
+      city: z.string().trim().min(1, 'Choose a place from the list.').max(255, 'Use at most 255 characters.'),
       ...stayShape(now),
     })
     .superRefine(checkStayDates);
