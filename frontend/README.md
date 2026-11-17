@@ -9,14 +9,45 @@ Nothing needs installing on your machine: everything below runs in Docker. Open 
 
 ## Stack and why
 
-| | |
-|---|---|
-| Vite + React 19 + TypeScript (strict, `noUncheckedIndexedAccess`) | fast builds, typed end to end |
-| TanStack Query | server data: caching, retries, loading and error states |
-| `openapi-typescript` + `openapi-fetch` | request and response types **generated from the backend's OpenAPI spec**, so a backend change that breaks the UI fails at compile time |
-| Tailwind CSS v4 with design tokens in `src/index.css` | one calm blue, deep-navy text, quiet borders (Stripe-docs-like) |
-| Vitest + Testing Library | unit and component tests |
-| Self-hosted Inter font | no third-party requests, so the CSP can stay `default-src 'self'` |
+| Tool                                                              | Why                                                                      |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Vite + React 19 + TypeScript (strict, `noUncheckedIndexedAccess`) | fast builds, typed end to end                                            |
+| TanStack Query                                                    | server data: caching, retries, loading and error states                  |
+| `openapi-typescript` + `openapi-fetch`                            | request and response types **generated from the backend's OpenAPI spec** |
+| Tailwind CSS v4, design tokens in `src/index.css`                 | one calm blue, deep-navy text, quiet borders (Stripe-docs-like)          |
+| Vitest + Testing Library                                          | unit and component tests                                                 |
+| ESLint (strict, type-aware) + Prettier                            | enforced standards, see below                                            |
+| Self-hosted Inter font                                            | no third-party requests, so the CSP can stay `default-src 'self'`        |
+
+TypeScript is pinned to 5.x: `openapi-typescript` needs the TypeScript 5 compiler API, which TypeScript 7 no longer provides.
+ESLint is pinned to 9 because `eslint-plugin-jsx-a11y` does not support 10 yet. Revisit both when those catch up.
+
+## Standards, enforced by tooling (not by good intentions)
+
+`npm run check` runs all of this, CI runs it on every push, and a failure blocks the build:
+
+- **TypeScript strict**, plus `noUncheckedIndexedAccess`, `noUnusedLocals` and `noUnusedParameters`.
+- **ESLint** with the type-aware `strict` and `stylistic` rule sets, React and React Hooks rules, and `jsx-a11y` accessibility
+  rules. Zero warnings are allowed. Also enforced: named exports only, `import type` for types, no `console.log`, `===` only, braces
+  always, no floating promises, exhaustive `switch`, sorted imports.
+- **Prettier** formats everything (`npm run format`); ESLint never argues about formatting.
+- **Architecture boundaries** (`eslint-plugin-boundaries`): dependencies point one way, `app` to `features` to `shared`, and a
+  feature never imports another feature. Importing against the grain is a lint error, so the structure cannot erode silently.
+- **Tests** for logic and components; accessibility is part of the component tests (labels, roles, announced errors).
+
+### Conventions
+
+- **Structure by product area**, not by file type: `src/features/<name>/` holds that area's screens, hooks and components. Anything
+  used by two features moves to `src/shared/`.
+- **One component per file**, named like the file (`Button.tsx` exports `Button`), PascalCase; hooks start with `use`; plain
+  modules are camelCase.
+- **Server data goes through the typed API client and TanStack Query**, never raw `fetch` in a component (the health check is the
+  one exception: that endpoint is not part of the API spec).
+- **No `any`, no `as` to silence the compiler.** Unknown data is narrowed with a type guard (see `isEnvelope`).
+- **Comments say why, not what.** If a comment restates the code, delete it.
+- **Style with the design tokens** (`bg-brand-600`, `text-ink`), not hard-coded colours. See `/design`.
+- **Accessibility is not optional**: every field has a label, errors are announced, interactive elements are real buttons and
+  links, focus is visible.
 
 ## Commands (in Docker)
 
@@ -24,8 +55,10 @@ Nothing needs installing on your machine: everything below runs in Docker. Open 
 # Git Bash on Windows needs MSYS_NO_PATHCONV=1. node_modules lives in a Docker volume, not in your folder.
 RUN="docker run --rm -v $PWD/frontend:/app -v airstay_fe_node_modules:/app/node_modules -w /app node:22-alpine"
 
-$RUN sh -c "npm ci && npm run typecheck && npm test"       # typecheck and tests
-$RUN npm run build                                         # production build into dist/
+$RUN npm run check          # typecheck + lint + format check + tests: what CI runs
+$RUN npm run lint:fix       # fix what ESLint can (import order, type imports, ...)
+$RUN npm run format         # Prettier
+$RUN npm run build          # production build into dist/
 
 # Regenerate the API types after a backend change (the stack must be running):
 docker run --rm --network airstay_default -v "$PWD/frontend":/app -v airstay_fe_node_modules:/app/node_modules -w /app \
@@ -36,22 +69,35 @@ docker run --rm -p 5174:5173 --network airstay_default -e VITE_POLLING=1 \
   -v "$PWD/frontend":/app -v airstay_fe_node_modules:/app/node_modules -w /app node:22-alpine npm run dev
 ```
 
-CI runs the typecheck, tests and build, and fails if `src/api/schema.d.ts` no longer matches the live backend spec.
+CI has two jobs for the frontend. The `frontend` job runs typecheck, lint, format check, tests and the build. The `docker` job, which
+has the stack running, also fails if `src/shared/api/schema.d.ts` no longer matches the backend's live spec, and smoke-tests the
+page and the `/api` proxy.
 
 ## How the API is used
 
-Every backend response is wrapped as `{ timeStamp, data, error }`, but the OpenAPI spec describes the bare body. `src/api/client.ts`
-unwraps successful responses in one place (`unwrapEnvelope`), so the types match what the code receives. Errors keep their body;
+Every backend response is wrapped as `{ timeStamp, data, error }`, but the OpenAPI spec describes the bare body.
+`src/shared/api/client.ts` unwraps successful responses in one place (`unwrapEnvelope`; both `timeStamp` and `data` must be present,
+so a body that merely has a `data` field is left alone), so the types match what the code receives. Errors keep their body;
 `errorMessage()` turns one into readable text.
 
-Known limitation: the spec does not mark response fields as required, so the generated types make every field optional (`id?: number`).
-Pages must handle that, or the backend can add `@Schema(requiredMode = REQUIRED)` to its DTOs.
+Known limitation: the spec does not mark response fields as required, so the generated types make every field optional
+(`id?: number`) and the type check cannot yet prove a field is present. The backend can fix this by adding
+`@Schema(requiredMode = REQUIRED)` to its DTOs; that is planned before the screens that need it.
+
+## Running behind the proxy: things to know
+
+- The refresh cookie is `Secure`. Chrome and Firefox accept it on `http://localhost`; Safari, and any other plain-HTTP address such as
+  `http://192.168.x.x:5173`, drop it, so login would not persist there. Use `localhost` (or HTTPS) when trying the app.
+- Nginx adds the security headers (CSP, `X-Frame-Options`, ...) to the web app only, not to `/api/`. A page-level CSP would break the
+  backend's Swagger UI, which is still available directly on port 8080.
+- The app container trusts `X-Forwarded-For` from the proxy (`SERVER_FORWARD_HEADERS_STRATEGY=framework` in `docker-compose.yml`) so
+  the per-IP rate limits see the real client address.
 
 ## Layout
 
 ```
-src/api/         generated schema.d.ts, the typed client, health check hook
-src/components/  ui/ building blocks (Button, Card, Input, Badge)
-src/pages/       one file per screen (/design shows the building blocks)
-src/lib/         small helpers
+src/app/        wiring: App (routes, layout), NotFoundPage
+src/features/   one folder per product area: home/, design/ (the /design page shows the building blocks)
+src/shared/     api/ (generated schema, typed client), ui/ (Button, Card, Input, Badge), lib/
+src/test/       test setup
 ```

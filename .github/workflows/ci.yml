@@ -93,7 +93,7 @@ jobs:
           fi
 
   frontend:
-    name: Frontend typecheck, test and build
+    name: Frontend lint, typecheck, test and build
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -106,13 +106,15 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      # Strict TypeScript, unit and component tests, then a production build. Whether the generated API types still match the
+      # Strict TypeScript, ESLint (zero warnings allowed), Prettier, unit and component tests, then a production build. Whether the generated API types still match the
       # backend is checked in the docker job below, where a running backend exists.
-      - name: Install, typecheck, test, build
+      - name: Install, typecheck, lint, format check, test, build
         working-directory: frontend
         run: |
           npm ci --no-audit --no-fund
           npm run typecheck
+          npm run lint
+          npm run format:check
           npm test
           npm run build
 
@@ -164,7 +166,7 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5173/design)" = "200"
           echo "Image size (frontend): $(docker image inspect airstay-frontend:local --format '{{.Size}}' | numfmt --to=iec)" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # The API types in frontend/src/api/schema.d.ts are generated from the backend's OpenAPI spec. If the backend changed
+      # The API types in frontend/src/shared/api/schema.d.ts are generated from the backend's OpenAPI spec. If the backend changed
       # and the file was not regenerated, this fails and shows the difference.
       - name: Check the generated API types are current
         run: |

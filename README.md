@@ -173,7 +173,7 @@ before and after on the same data. Treat them as ratios, not as production laten
 ## Frontend
 
 [`frontend/`](frontend/README.md) is a React + strict TypeScript web app (Vite, TanStack Query, Tailwind) in the same repository.
-Its API types are generated from this backend's OpenAPI spec, and CI fails if they drift. It is served by Nginx, which also forwards
+Its API types are generated from this backend's OpenAPI spec, and the Docker CI job fails if they drift. Lint (zero warnings), formatting, strict TypeScript and import boundaries are enforced in CI. It is served by Nginx, which also forwards
 `/api` to the backend, so the browser uses one origin. It is being built in stages; so far: the foundation (typed client, design
 basics, Docker and CI). Open it at <http://localhost:5173> after `docker compose up --build`.
 
