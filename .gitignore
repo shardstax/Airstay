@@ -37,3 +37,4 @@ build/
 load-tests/results/*.json
 load-tests/results/.samples-*
 load-tests/results/.docker-stats-*
+!load-tests/results/*.summary.json

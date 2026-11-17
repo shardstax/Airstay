@@ -1,0 +1,65 @@
+{
+  "label": "contention-base",
+  "mode": "contention",
+  "runId": "1794899532",
+  "rate": null,
+  "vus": 100,
+  "duration": "30s",
+  "requestsPerSecond": 348.56666666666666,
+  "droppedIterations": 0,
+  "totals": {
+    "flows_started": 10317,
+    "holds_created": 35,
+    "holds_sold_out": 10282,
+    "holds_busy": 0,
+    "bookings_confirmed": 35,
+    "bookings_cancelled": 0,
+    "flows_abandoned": 0,
+    "flows_no_results": 0,
+    "server_errors": 0,
+    "unexpected_answers": 0
+  },
+  "checksPassRate": 1,
+  "perEndpoint": {
+    "init": {
+      "count": 10317,
+      "p50": 257.256143,
+      "p90": 540.5274714,
+      "p95": 644.9545998,
+      "p99": 875.9828624800001,
+      "max": 1630.440024
+    },
+    "addGuests": {
+      "count": 35,
+      "p50": 351.82972,
+      "p90": 541.8877284,
+      "p95": 578.1028510999998,
+      "p99": 623.0822820399999,
+      "max": 634.403413
+    },
+    "payments": {
+      "count": 35,
+      "p50": 302.278456,
+      "p90": 715.1918766,
+      "p95": 818.3741488999999,
+      "p99": 847.89695246,
+      "max": 852.738529
+    },
+    "webhook": {
+      "count": 35,
+      "p50": 255.850955,
+      "p90": 571.9683718,
+      "p95": 674.9208077999997,
+      "p99": 756.8153528199999,
+      "max": 761.844744
+    },
+    "status": {
+      "count": 35,
+      "p50": 280.979313,
+      "p90": 539.1633714000002,
+      "p95": 623.3705325999999,
+      "p99": 680.2125596199998,
+      "max": 706.22586
+    }
+  }
+}

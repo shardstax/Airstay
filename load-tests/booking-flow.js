@@ -45,7 +45,7 @@ const STOCKS = (__ENV.STOCKS || '5,10,20').split(',').map((s) => parseInt(s, 10)
 
 const MEASURED = MODE === 'contention' ? 'contention' : 'measured';
 
-// Run totals (whole run, warm-up included): the runner compares them with what the database says.
+// Run totals (whole run, warm-up included); compare them by eye with the booking counts the runner prints from the database.
 const flows = new Counter('flows_started');
 const holds = new Counter('holds_created');          // POST /bookings/init answered 201
 const soldOut = new Counter('holds_sold_out');       // 409 "not available": the clean answer when stock is gone
@@ -188,8 +188,12 @@ function hold(user, hotelId, roomId, checkIn, checkOut) {
     if (message.includes('busy')) {
       busy.add(1);
       check(response, { 'init: no lock conflict ("resource busy")': () => false });
-    } else {
+    } else if (message.includes('not available')) {
       soldOut.add(1);
+    } else {
+      // Some other conflict (for example an idempotency clash): never count it as a clean "sold out".
+      unexpected.add(1);
+      check(response, { 'init: 409 is "not available" or "busy"': () => false });
     }
     return null;
   }
@@ -285,7 +289,7 @@ export function handleSummary(data) {
     }
   }
   const measuredRequests = metric(`http_reqs{scenario:${MEASURED}}`).count || 0;
-  const measuredSeconds = MODE === 'contention' ? parseInt(DURATION, 10) : parseInt(DURATION, 10);
+  const measuredSeconds = seconds(DURATION);
   const compact = {
     label: LABEL, mode: MODE, runId: RUN_ID, rate: MODE === 'contention' ? null : RATE, vus: MODE === 'contention' ? VUS : null,
     duration: DURATION, requestsPerSecond: measuredRequests / measuredSeconds,
@@ -311,4 +315,13 @@ export function handleSummary(data) {
     [`/scripts/results/${LABEL}.json`]: JSON.stringify(data),
     [`/scripts/results/${LABEL}.summary.json`]: JSON.stringify(compact, null, 2),
   };
+}
+
+// "45s", "2m", "1h30m", "500ms" -> seconds.
+function seconds(duration) {
+  let total = 0;
+  for (const [, amount, unit] of duration.matchAll(/(\d+(?:\.\d+)?)(ms|s|m|h)/g)) {
+    total += parseFloat(amount) * { ms: 0.001, s: 1, m: 60, h: 3600 }[unit];
+  }
+  return total > 0 ? total : parseFloat(duration);
 }

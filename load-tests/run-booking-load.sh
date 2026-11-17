@@ -35,16 +35,26 @@ docker run --rm -i --network airstay_default "${ENVS[@]}" -v "$PWD/load-tests:/s
 kill $SAMPLER $STATSPID 2>/dev/null || true
 
 echo; echo "== Database check (run $RUN_ID) =="
-VERIFY="$(psql_airstay -v run="$RUN_ID" < load-tests/verify-no-overbooking.sql)"
+FAIL=0
+VERIFY="$(psql_airstay -v run="$RUN_ID" < load-tests/verify-no-overbooking.sql)" || { echo "database check could not run"; VERIFY=""; FAIL=1; }
 echo "$VERIFY"
-BAD="$(echo "$VERIFY" | awk -F'|' 'NR==3 {gsub(/ /,"",$3); gsub(/ /,"",$4); gsub(/ /,"",$5); print ($3+$4+$5)}')"
+# Line 3 of the first result is the data row: hotels | nights | oversold | counters differ | negative | ...
+read -r HOTELS NIGHTS BAD <<<"$(echo "$VERIFY" | awk -F'|' 'NR==3 {gsub(/ /,""); print $1, $2, ($3+$4+$5)}')"
+if [ -z "${HOTELS:-}" ] || [ "${HOTELS:-0}" -eq 0 ] || [ "${NIGHTS:-0}" -eq 0 ]; then
+  echo "NOTHING WAS CHECKED: no hotels or inventory nights found for this run (a pass here would mean nothing)"; FAIL=1
+fi
+if echo "$VERIFY" | grep -qE '^ *(CONFIRMED|RESERVED|GUESTS_ADDED|PAYMENTS_PENDING|CANCELLED|EXPIRED) '; then :; else
+  echo "NOTHING WAS CHECKED: the run created no bookings"; FAIL=1
+fi
 
 echo; echo "== Peak database activity (active / waiting on a lock / total connections) =="
-sort -t, -k2 -n -r "$SAMPLES" | head -1 | awk -F, '{print "peak active "$2", peak total "$4}'
-sort -t, -k3 -n -r "$SAMPLES" | head -1 | awk -F, '{print "peak waiting on a lock "$3}'
-echo "== Container CPU/memory, highest samples =="; grep -E '^airstay-(app|postgres)' "$STATS" | sort -t= -k2 -n -r | head -4 || true
+if [ -s "$SAMPLES" ]; then
+  sort -t, -k2 -n -r "$SAMPLES" | head -1 | awk -F, '{print "peak active "$2", peak total "$4}' || true
+  sort -t, -k3 -n -r "$SAMPLES" | head -1 | awk -F, '{print "peak waiting on a lock "$3}' || true
+else echo "(no samples were collected)"; fi
+echo "== Container CPU/memory, highest samples =="
+{ grep -E '^airstay-(app|postgres)' "$STATS" | sort -t= -k2 -n -r | head -4; } 2>/dev/null || true
 
-FAIL=0
 [ "$K6_STATUS" -ne 0 ] && { echo "k6 exited with $K6_STATUS"; FAIL=1; }
 [ "${BAD:-1}" != "0" ] && { echo "OVERBOOKING OR COUNTER DRIFT DETECTED (violations: ${BAD:-unknown})"; FAIL=1; }
 echo "run id $RUN_ID  (clean up: docker compose exec -T postgres psql -U airstay -d airstay -v run=$RUN_ID < load-tests/unload.sql)"

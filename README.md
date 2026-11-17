@@ -163,8 +163,10 @@ before and after on the same data. Treat them as ratios, not as production laten
   10,282 attempts got a clean 409, with no lock conflicts and no 5xx. PostgreSQL showed 0 oversold nights and inventory counters equal to the
   booking rows; the same check passed after every mixed run.
 - **Realistic flow** (search, hold, guests, payment, webhook, confirm, some abandon or cancel): about 320 requests/s at 60 new shoppers/s with
-  p95 under 26 ms for every step and 0 errors. At 100/s latency rises (hold p95 0.35 to 1 s) and errors stay at 0.
-- **The connection pool was not shown to be the bottleneck:** 30 connections instead of 10 made no measurable difference, so it was left alone.
+  p95 under 26 ms for every step and 0 errors. At 100/s latency rises (hold p95 0.35 to 1 s), errors stay at 0, but the load generator
+  could not start every shopper (36 to 203 dropped iterations), so that rate is past this laptop's comfortable limit.
+- **The connection pool was not shown to be the bottleneck:** between two cold-start runs, 30 connections instead of 10 made no
+  measurable difference (single runs, so it is not proof), and it was left alone.
 - Not measured: real Stripe, several app instances, a separate load generator.
   Details: [`load-tests/results/phase6-booking-load.md`](load-tests/results/phase6-booking-load.md).
 
