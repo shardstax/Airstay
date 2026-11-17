@@ -7,6 +7,38 @@ calls `/api`, which Nginx (in Docker) or the Vite dev server forwards to the bac
 Nothing needs installing on your machine: everything below runs in Docker. Open the whole product with
 `docker compose up --build` and visit <http://localhost:5173>.
 
+## What it does
+
+Guests: search by place and dates (with paging and sold-out handling), a hotel page with room prices for the stay, **reserve** a room
+(with a 10-minute hold clock), name the guests, **pay on Stripe's hosted checkout**, and a return page that waits for the payment
+confirmation; then **My account** (profile, bookings with cancel-and-refund, saved guests).
+Hotel managers (a sign-up option): list hotels, add room types, put a hotel on sale, see its bookings and the last 30 days, and set
+price factors or close nights. Reports and charts come with the monitoring work.
+
+## Places and fixed choices: nothing important is free text
+
+- **The city is chosen from real places**, never typed. `shared/places/PlaceCombobox` is an accessible combobox (keyboard, `aria-*`,
+  status messages) fed by `GET /places`, which asks a geocoding provider (Open-Meteo, data from GeoNames, credited in the footer) through
+  the backend. A search starts at two letters and waits for a pause in typing. The form's value only becomes non-empty by choosing a
+  suggestion; for a hotel the form sends the place's **id**, and the server derives the city name from it.
+- **Amenities and room types are ticked or picked from lists** served by `GET /catalog` and checked again by the server.
+- Photos must be **https** links, phone numbers and emails are validated, and numbers have the backend's limits. Each rule lives in one
+  schema (`hotelSchema`, `roomSchema`, `inventorySchema`, ...) that mirrors the backend's validation, so the form refuses what the server
+  would, and the server stays the authority.
+
+## Booking and payment
+
+Reserving sends an `Idempotency-Key`, kept while no answer has arrived, so a retry after a lost response cannot hold a second room. The
+hold clock counts down to the server's UTC expiry and asks the server again when it hits zero. Guests can be named once, up to the room's
+limit; payment starts on the server and the browser is redirected to Stripe (only `https` addresses are followed). Stripe sends the user
+back to `/payments/:id/status`, which polls until the webhook has confirmed the booking and says so plainly if it is slow. The session
+survives the round trip because it is restored from the refresh cookie.
+
+## Performance
+
+The account and manager areas load on demand (code splitting), so a first visit only downloads what search and booking need: the main
+bundle is about 107 KB gzipped (React, router, query, forms, the API client), against about 140 KB before splitting.
+
 ## Stack and why
 
 | Tool                                                              | Why                                                                         |
@@ -120,8 +152,8 @@ live in `shared/lib/stay.ts`, so the form, the search page and the hotel page ca
 ## Layout
 
 ```
-src/app/        wiring: App (routes, layout), Header, NotFoundPage
-src/features/   one folder per product area: search/ (home, results), hotel/, auth/ (sign in, sign up), account/, design/ (/design)
-src/shared/     api/ (generated schema, typed client), session/ (token, refresh, route guards), ui/, lib/ (stay and date rules, formats)
+src/app/        wiring: App (routes, lazy loading, layout), Header, route effects (titles, focus), NotFoundPage
+src/features/   one folder per product area: search/, hotel/, booking/, auth/, account/, manager/, design/ (/design)
+src/shared/     api/ (generated schema, typed client), session/ (token, refresh, guards), places/ (the picker), guests/, ui/, lib/
 src/test/       test setup
 ```

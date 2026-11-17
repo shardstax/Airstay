@@ -1,8 +1,12 @@
 # End-to-end checks against the real stack
 
-Three browser scripts, all headless Playwright in Docker (nothing installed on your machine):
+Four browser scripts, all headless Playwright in Docker (nothing installed on your machine):
 
 - `stripe-real-flow.js`: payments with real Stripe (sandbox), described below.
+- `frontend-journey.js`: **the whole product in one run.** A manager signs up and lists a hotel through the UI (place picker, amenities,
+  photo, room type, put on sale); a guest finds it, reserves, names a guest, pays on the real Stripe checkout page with the test card and
+  sees the confirmation, then cancels and is refunded (the script checks that Stripe refunded exactly the amount shown); the manager sees the
+  booking and changes prices. Needs the real Stripe sandbox keys in `.env`.
 - `frontend-browse.js`: search, results with paging, the hotel page, sold-out and not-found states, and phone-width layout. It creates its
   own hotels through the API first (12 in one city, plus a fully booked one). Run it exactly like `frontend-auth.js` below, replacing the
   script name.
@@ -12,6 +16,14 @@ Three browser scripts, all headless Playwright in Docker (nothing installed on y
   ```bash
   docker run --rm -v "$PWD/e2e":/w -w /w mcr.microsoft.com/playwright:v1.49.1-noble bash -c 'npm i --silent playwright@1.49.1 >/dev/null 2>&1; export WEB_HOST=$(getent hosts host.docker.internal | cut -d" " -f1); node frontend-auth.js'
   ```
+
+---
+
+## Before running the browser scripts
+
+The browser scripts create hotels, so start the stack with synthetic places (any place id works and searching a name returns a place of
+that name, so no script depends on the Internet or on a real city): `PLACES_PROVIDER=synthetic docker compose --profile stripe up -d --build --wait`.
+The synthetic provider refuses to start with the `prod` profile. A normal `docker compose up` uses the real provider.
 
 ---
 
