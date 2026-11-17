@@ -1,7 +1,6 @@
 package com.shardx.hotelManagement.airBnb.repository;
 
 import com.shardx.hotelManagement.airBnb.dto.RoomPriceDto;
-import com.shardx.hotelManagement.airBnb.entity.Hotel;
 import com.shardx.hotelManagement.airBnb.entity.Inventory;
 import com.shardx.hotelManagement.airBnb.entity.Room;
 import jakarta.persistence.LockModeType;
@@ -25,8 +24,6 @@ import java.util.List;
 public interface InventoryRepository extends JpaRepository<Inventory, Long> {
 
     void deleteByRoom(Room room);
-
-    List<Inventory> findByHotelAndDateBetween(Hotel hotel, LocalDate startDate, LocalDate endDate);
 
     /**
      * Creates one inventory row per night for a room, from today (offset 0) to today + lastDayOffset, in ONE statement
@@ -52,6 +49,20 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long> {
                      @Param("price") BigDecimal price,
                      @Param("city") String city,
                      @Param("now") LocalDateTime now);
+
+    /**
+     * Every night of a hotel in the range together with its room (the base price is needed to compute the price), in one
+     * query. Without the join fetch each room would be loaded by a separate query.
+     */
+    @Query("""
+            SELECT i
+            FROM Inventory i JOIN FETCH i.room
+            WHERE i.hotel.id = :hotelId
+              AND i.date BETWEEN :startDate AND :endDate
+            """)
+    List<Inventory> findForPricing(@Param("hotelId") Long hotelId,
+                                   @Param("startDate") LocalDate startDate,
+                                   @Param("endDate") LocalDate endDate);
 
     List<Inventory> findByRoomOrderByDate(Room room);
 

@@ -11,7 +11,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
-import java.util.Optional;
 
 public interface HotelMinPriceRepository extends JpaRepository<HotelMinPrice, Long> {
 
@@ -62,8 +61,6 @@ public interface HotelMinPriceRepository extends JpaRepository<HotelMinPrice, Lo
             @Param("dateCount") Long dateCount,
             Pageable pageable
     );
-
-    Optional<HotelMinPrice> findByHotelAndDate(Hotel hotel, LocalDate date);
 
     @Modifying
     @Query("DELETE FROM HotelMinPrice mp WHERE mp.hotel = :hotel")

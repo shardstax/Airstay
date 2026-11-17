@@ -1,16 +1,15 @@
 package com.shardx.hotelManagement.airBnb.service;
 
 import com.shardx.hotelManagement.airBnb.entity.Hotel;
-import com.shardx.hotelManagement.airBnb.entity.HotelMinPrice;
 import com.shardx.hotelManagement.airBnb.entity.Inventory;
-import com.shardx.hotelManagement.airBnb.repository.HotelMinPriceRepository;
 import com.shardx.hotelManagement.airBnb.repository.HotelRepository;
 import com.shardx.hotelManagement.airBnb.repository.InventoryRepository;
+import com.shardx.hotelManagement.airBnb.repository.PriceWriter;
 import com.shardx.hotelManagement.airBnb.strategy.PricingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,15 +18,19 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.TreeMap;
 
 /**
- * Keeps stored nightly prices (inventory.price) and each hotel's daily "from" price (hotel_min_price)
- * up to date. Runs hourly, and on demand after owners change prices or surge factors.
+ * Keeps stored nightly prices (inventory.price) and each hotel's daily "from" price (hotel_min_price) up to date.
+ * Runs hourly, and on demand after owners change prices or surge factors.
+ *
+ * <p>Cost per hotel is constant in the number of nights: one query reads the hotel's nights (with their rooms), the prices
+ * are computed in memory, and at most two statements write the result (only rows whose price changed). It used to run
+ * one query per night for the "from" prices and one write per changed row.
  */
 @Service
 @RequiredArgsConstructor
@@ -38,7 +41,7 @@ public class PricingUpdateService {
 
     private final HotelRepository hotelRepository;
     private final InventoryRepository inventoryRepository;
-    private final HotelMinPriceRepository hotelMinPriceRepository;
+    private final PriceWriter priceWriter;
     private final PricingService pricingService;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
@@ -53,22 +56,20 @@ public class PricingUpdateService {
         int hotels = 0;
         int failed = 0;
         int page = 0;
-        while (true) {
-            Page<Hotel> hotelPage = hotelRepository.findAll(PageRequest.of(page, HOTEL_BATCH_SIZE));
-            if (hotelPage.isEmpty()) {
-                break;
-            }
-            for (Hotel hotel : hotelPage.getContent()) {
+        Slice<Long> hotelIds;
+        do {
+            hotelIds = hotelRepository.findAllIds(PageRequest.of(page, HOTEL_BATCH_SIZE));
+            for (Long hotelId : hotelIds.getContent()) {
                 hotels++;
                 try {
-                    transactionTemplate.executeWithoutResult(status -> updateHotelPrices(hotel));
+                    transactionTemplate.executeWithoutResult(status -> updateHotelPrices(hotelId));
                 } catch (RuntimeException e) {
                     failed++;
-                    log.error("Price update failed for hotel {}; will retry next run", hotel.getId(), e);
+                    log.error("Price update failed for hotel {}; will retry next run", hotelId, e);
                 }
             }
             page++;
-        }
+        } while (hotelIds.hasNext());
         log.info("Price refresh finished: {} hotels ({} failed) in {} ms", hotels, failed,
                 (System.nanoTime() - startedAt) / 1_000_000);
     }
@@ -76,40 +77,34 @@ public class PricingUpdateService {
     /** Recomputes stored nightly prices and the hotel's daily "from" price. Joins the caller's transaction. */
     @Transactional
     public void updateHotelPrices(Hotel hotel) {
-        log.info("Updating hotel prices for hotel ID: {}", hotel.getId());
+        updateHotelPrices(hotel.getId());
+    }
+
+    @Transactional
+    public void updateHotelPrices(Long hotelId) {
         LocalDate startDate = LocalDate.now(clock);
         LocalDate endDate = startDate.plusYears(1);
+        LocalDateTime now = LocalDateTime.now(clock);
 
-        List<Inventory> inventoryList = inventoryRepository.findByHotelAndDateBetween(hotel, startDate, endDate);
+        List<Inventory> nights = inventoryRepository.findForPricing(hotelId, startDate, endDate);
 
-        updateInventoryPrices(inventoryList);
-        updateHotelMinPrice(hotel, inventoryList);
-    }
+        List<Long> changedIds = new ArrayList<>();
+        List<BigDecimal> changedPrices = new ArrayList<>();
+        // Lowest room price per night for the hotel (sorted by date)
+        Map<LocalDate, BigDecimal> cheapestByDate = new TreeMap<>();
+        for (Inventory night : nights) {
+            BigDecimal price = pricingService.calculateDynamicPricing(night);
+            if (night.getPrice().compareTo(price) != 0) {
+                changedIds.add(night.getId());
+                changedPrices.add(price);
+            }
+            cheapestByDate.merge(night.getDate(), price, BigDecimal::min);
+        }
 
-    private void updateHotelMinPrice(Hotel hotel, List<Inventory> inventoryList) {
-        // Lowest room price per night for the hotel
-        Map<LocalDate, BigDecimal> dailyMinPrices = inventoryList.stream()
-                .collect(Collectors.groupingBy(
-                        Inventory::getDate,
-                        Collectors.mapping(Inventory::getPrice, Collectors.minBy(Comparator.naturalOrder()))
-                ))
-                .entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().orElse(BigDecimal.ZERO)));
-
-        List<HotelMinPrice> hotelPrices = new ArrayList<>();
-        dailyMinPrices.forEach((date, price) -> {
-            HotelMinPrice hotelPrice = hotelMinPriceRepository.findByHotelAndDate(hotel, date)
-                    .orElse(new HotelMinPrice(hotel, date));
-            hotelPrice.setPrice(price);
-            hotelPrices.add(hotelPrice);
-        });
-
-        hotelMinPriceRepository.saveAll(hotelPrices);
-    }
-
-    private void updateInventoryPrices(List<Inventory> inventoryList) {
-        // Only `price` changes here; Inventory uses @DynamicUpdate so counts are never overwritten.
-        inventoryList.forEach(inventory -> inventory.setPrice(pricingService.calculateDynamicPricing(inventory)));
-        inventoryRepository.saveAll(inventoryList);
+        // Only the price is written, in set-based statements, so booking counts are never touched.
+        int pricesChanged = changedIds.isEmpty() ? 0 : priceWriter.updateInventoryPrices(changedIds, changedPrices, now);
+        int fromPricesWritten = cheapestByDate.isEmpty() ? 0 : priceWriter.upsertHotelMinPrices(hotelId, cheapestByDate, now);
+        log.debug("Hotel {}: {} nights read, {} nightly prices and {} 'from' prices written",
+                hotelId, nights.size(), pricesChanged, fromPricesWritten);
     }
 }
