@@ -95,6 +95,18 @@ services:
       start_period: 40s
     restart: unless-stopped
 
+  # The web app (frontend/): static files served by Nginx, which also forwards /api to the app so the browser only talks
+  # to one origin. Open http://localhost:5173 (the port the backend's FRONTEND_URL and CORS defaults already name).
+  frontend:
+    build: ./frontend
+    image: airstay-frontend:local
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    restart: unless-stopped
+
   # A fake mail server with a web inbox: every e-mail the notification service sends lands here, never on the Internet.
   # Web UI: http://localhost:8025 (SMTP on 1025 is only reachable by the other containers).
   mailpit:
