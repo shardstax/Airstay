@@ -33,8 +33,13 @@ public record BookingEvent(
 
     /** Must run inside the booking's transaction: it reads lazily loaded user, hotel and room. */
     public static BookingEvent of(BookingEventType type, Booking booking, LocalDateTime now) {
+        return of(type, booking, now, UUID.randomUUID());
+    }
+
+    /** Same, with a chosen event id: lets an event be derived from its cause so it can never be recorded twice. */
+    public static BookingEvent of(BookingEventType type, Booking booking, LocalDateTime now, UUID eventId) {
         return new BookingEvent(
-                UUID.randomUUID().toString(),
+                eventId.toString(),
                 type.name(),
                 now,
                 booking.getId(),

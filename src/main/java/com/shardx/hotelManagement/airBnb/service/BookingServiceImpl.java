@@ -25,8 +25,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -272,9 +270,9 @@ public class BookingServiceImpl implements BookingService {
             }
             default -> {
                 // Money arrived for a booking that no longer holds rooms (expired or cancelled): give it back.
-                log.warn("Payment received for booking {} in status {}; refunding",
+                log.warn("Payment received for booking {} in status {}; requesting a refund",
                         booking.getId(), booking.getBookingStatus());
-                refundAfterCommit(booking);
+                outboxService.record(BookingEventType.REFUND_REQUESTED, booking);
             }
         }
     }
@@ -309,7 +307,9 @@ public class BookingServiceImpl implements BookingService {
         booking.setBookingStatus(BookingStatus.CANCELLED);
         bookingRepository.save(booking);
         outboxService.record(BookingEventType.BOOKING_CANCELLED, booking);
-        refundAfterCommit(booking);
+        // Saved in this same transaction, so a cancelled booking always has its refund request, and the RefundWorker
+        // retries a failing Stripe instead of the request thread making the call and logging a failure.
+        outboxService.record(BookingEventType.REFUND_REQUESTED, booking);
     }
 
     @Override
@@ -408,26 +408,6 @@ public class BookingServiceImpl implements BookingService {
         bookingRepository.save(booking);
         outboxService.record(BookingEventType.BOOKING_EXPIRED, booking);
         log.info("Booking {} expired and its held rooms were released", booking.getId());
-    }
-
-    /**
-     * Refunds only after the cancellation is committed, so we never refund money for a booking that
-     * is still active in our database. If Stripe fails here the error is logged for a manual retry;
-     * Phase 4 replaces this with a transactional outbox and automatic retries.
-     */
-    private void refundAfterCommit(Booking booking) {
-        String sessionId = booking.getPaymentSessionId();
-        Long bookingId = booking.getId();
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                try {
-                    checkoutService.refund(sessionId, bookingId);
-                } catch (RuntimeException e) {
-                    log.error("REFUND_FAILED for booking {}; needs a manual retry", bookingId, e);
-                }
-            }
-        });
     }
 
     /**

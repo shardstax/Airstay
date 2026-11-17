@@ -26,8 +26,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.*;
@@ -103,9 +101,6 @@ class BookingServiceImplTest {
     @AfterEach
     void tearDown() {
         SecurityContextHolder.clearContext();
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.clearSynchronization();
-        }
     }
 
     @Nested
@@ -383,17 +378,17 @@ class BookingServiceImplTest {
         }
 
         @Test
-        void refundsPaymentForAnExpiredBookingOnlyAfterCommit() {
-            TransactionSynchronizationManager.initSynchronization();
+        void requestsARefundForPaymentThatArrivesForAnExpiredBooking() {
             Booking booking = booking(BookingStatus.EXPIRED, NOW.minusMinutes(1));
             when(bookingRepository.findByPaymentSessionIdForUpdate(SESSION_ID)).thenReturn(Optional.of(booking));
 
             bookingService.capturePayment(event("checkout.session.completed", "paid"));
 
-            verify(checkoutService, never()).refund(any(), any()); // nothing before commit
-            runAfterCommitCallbacks();
-            verify(checkoutService).refund(SESSION_ID, BOOKING_ID);
+            // Saved as an event in the webhook's own transaction; the refund worker calls Stripe, not this thread.
+            verify(outboxService).record(BookingEventType.REFUND_REQUESTED, booking);
+            verifyNoInteractions(checkoutService);
             verify(inventoryRepository, never()).confirmBooking(anyLong(), any(), any(), anyInt());
+            assertThat(booking.getBookingStatus()).as("the expired booking is not revived").isEqualTo(BookingStatus.EXPIRED);
         }
 
         @Test
@@ -451,8 +446,7 @@ class BookingServiceImplTest {
     class Cancellation {
 
         @Test
-        void releasesBookedRoomsAndRefundsAfterCommit() {
-            TransactionSynchronizationManager.initSynchronization();
+        void releasesBookedRoomsAndRecordsTheCancellationAndARefundRequestInOneTransaction() {
             Booking booking = booking(BookingStatus.CONFIRMED, null);
             when(bookingRepository.findByIdForUpdate(BOOKING_ID)).thenReturn(Optional.of(booking));
             when(inventoryRepository.releaseBookedRooms(ROOM_ID, CHECK_IN, LAST_NIGHT, 2)).thenReturn(2);
@@ -461,9 +455,9 @@ class BookingServiceImplTest {
 
             assertThat(booking.getBookingStatus()).isEqualTo(BookingStatus.CANCELLED);
             verify(outboxService).record(BookingEventType.BOOKING_CANCELLED, booking);
-            verify(checkoutService, never()).refund(any(), any());
-            runAfterCommitCallbacks();
-            verify(checkoutService).refund(SESSION_ID, BOOKING_ID);
+            verify(outboxService).record(BookingEventType.REFUND_REQUESTED, booking);
+            // The request thread never calls Stripe: a slow or failing Stripe cannot fail or delay a cancellation.
+            verifyNoInteractions(checkoutService);
         }
 
         @Test
@@ -550,9 +544,5 @@ class BookingServiceImplTest {
         when(event.getType()).thenReturn(type);
         when(event.getDataObjectDeserializer()).thenReturn(deserializer);
         return event;
-    }
-
-    private static void runAfterCommitCallbacks() {
-        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
     }
 }

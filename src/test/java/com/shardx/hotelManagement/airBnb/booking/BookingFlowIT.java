@@ -84,7 +84,8 @@ class BookingFlowIT extends IntegrationTestBase {
         assertThat(bookingStatus(guest, bookingId)).isEqualTo("CANCELLED");
         assertThat(bookedCount(hotel.roomId(), checkIn)).isZero();
         assertThat(bookedCount(hotel.roomId(), lastNight)).isZero();
-        verify(checkoutService, times(1)).refund(sessionId, bookingId);
+        // The refund is asynchronous now: the cancellation saves a request, Kafka carries it, a worker calls Stripe.
+        verify(checkoutService, timeout(20_000).times(1)).refund(sessionId, bookingId);
     }
 
     @Test

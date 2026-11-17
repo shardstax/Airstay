@@ -31,15 +31,34 @@ public class OutboxService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void record(BookingEventType type, Booking booking) {
+        save(type, booking, UUID.randomUUID());
+    }
+
+    /**
+     * Records the event with a chosen id, unless an event with that id already exists. Used when the event is derived
+     * from something that can be delivered twice (a Kafka message): the second delivery finds the first one's event and
+     * does nothing, so consumers never see a duplicate.
+     *
+     * @return true if the event was recorded now, false if it already existed
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean recordOnce(BookingEventType type, Booking booking, UUID eventId) {
+        if (repository.existsByEventId(eventId)) {
+            return false;
+        }
+        save(type, booking, eventId);
+        return true;
+    }
+
+    private void save(BookingEventType type, Booking booking, UUID eventId) {
         LocalDateTime now = LocalDateTime.now(clock);
-        BookingEvent event = BookingEvent.of(type, booking, now);
+        BookingEvent event = BookingEvent.of(type, booking, now, eventId);
         String payload;
         try {
             payload = objectMapper.writeValueAsString(event);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Cannot serialise " + type + " event for booking " + booking.getId(), e);
         }
-        repository.save(new OutboxEvent(UUID.fromString(event.eventId()), type.topic(),
-                String.valueOf(booking.getId()), type.name(), payload, now));
+        repository.save(new OutboxEvent(eventId, type.topic(), String.valueOf(booking.getId()), type.name(), payload, now));
     }
 }

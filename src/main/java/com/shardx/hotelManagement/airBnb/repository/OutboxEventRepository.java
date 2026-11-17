@@ -27,6 +27,8 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
 
     long countByPublishedAtIsNull();
 
+    boolean existsByEventId(java.util.UUID eventId);
+
     @Modifying
     @Query("DELETE FROM OutboxEvent e WHERE e.publishedAt IS NOT NULL AND e.publishedAt < :cutoff")
     int deletePublishedBefore(@Param("cutoff") LocalDateTime cutoff);

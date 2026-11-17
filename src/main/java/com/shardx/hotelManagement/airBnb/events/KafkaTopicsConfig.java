@@ -23,9 +23,5 @@ public class KafkaTopicsConfig {
         return TopicBuilder.name(Topics.REFUND_REQUESTS).partitions(3).replicas(1).build();
     }
 
-    @Bean
-    public NewTopic refundRequestsDeadLetterTopic() {
-        // Same partition count as the topic it belongs to, as the dead-letter recoverer expects by default.
-        return TopicBuilder.name(Topics.REFUND_REQUESTS_DLT).partitions(3).replicas(1).build();
-    }
+    // The retry topics and the dead-letter topic of the refund worker are declared by @RetryableTopic on RefundWorker.
 }
