@@ -1,4 +1,18 @@
-# End-to-end check with real Stripe (sandbox)
+# End-to-end checks against the real stack
+
+Two browser scripts, both headless Playwright in Docker (nothing installed on your machine):
+
+- `stripe-real-flow.js`: payments with real Stripe (sandbox), described below.
+- `frontend-auth.js`: the web app's sign-up, sign-in, session restore on reload and sign-out, against the running stack. Needs only
+  `docker compose up --build` (no Stripe keys). Run (Git Bash on Windows needs `MSYS_NO_PATHCONV=1`):
+
+  ```bash
+  docker run --rm -v "$PWD/e2e":/w -w /w mcr.microsoft.com/playwright:v1.49.1-noble bash -c 'npm i --silent playwright@1.49.1 >/dev/null 2>&1; export WEB_HOST=$(getent hosts host.docker.internal | cut -d" " -f1); node frontend-auth.js'
+  ```
+
+---
+
+# Real Stripe (sandbox)
 
 `stripe-real-flow.js` pays for a booking on Stripe's hosted checkout with Stripe's **test cards**, then checks the whole chain:
 the real webhook, confirmation, cancel with a real refund (through the Kafka refund worker), a declined card, and an expired session.

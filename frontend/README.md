@@ -84,6 +84,19 @@ Known limitation: the spec does not mark response fields as required, so the gen
 (`id?: number`) and the type check cannot yet prove a field is present. The backend can fix this by adding
 `@Schema(requiredMode = REQUIRED)` to its DTOs; that is planned before the screens that need it.
 
+## Sign-in and the session
+
+- The **access token lives in memory only** (it expires after 10 minutes). It is never written to storage, so an injected script cannot
+  find it after the tab closes.
+- A **reload restores the session** from the httpOnly refresh cookie (`POST /auth/refresh`). The only thing kept in
+  `localStorage` is a plain "a session was started" flag, so visitors who never signed in make no failing refresh request.
+  The flag is a hint, not a credential.
+- When a call answers 401, the client **refreshes once and replays the request once**; several calls expiring together share one refresh.
+  Sign-in, sign-up, refresh and sign-out never trigger a refresh. If the session cannot be renewed the user is sent to sign in again,
+  with an explanation, and returns to where they were. The return path is checked so only paths inside the app are accepted.
+- Pages that need an account sit under `RequireAuth`; sign-in and sign-up sit under `GuestOnly`. Both live in `src/shared/session`
+  because every feature needs them and features may not import each other.
+
 ## Running behind the proxy: things to know
 
 - The refresh cookie is `Secure`. Chrome and Firefox accept it on `http://localhost`; Safari, and any other plain-HTTP address such as
@@ -96,8 +109,8 @@ Known limitation: the spec does not mark response fields as required, so the gen
 ## Layout
 
 ```
-src/app/        wiring: App (routes, layout), NotFoundPage
-src/features/   one folder per product area: home/, design/ (the /design page shows the building blocks)
-src/shared/     api/ (generated schema, typed client), ui/ (Button, Card, Input, Badge), lib/
+src/app/        wiring: App (routes, layout), Header, NotFoundPage
+src/features/   one folder per product area: auth/ (sign in, sign up), account/, home/, design/ (the /design page)
+src/shared/     api/ (generated schema, typed client), session/ (token, refresh, route guards), ui/, lib/
 src/test/       test setup
 ```
