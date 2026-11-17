@@ -63,7 +63,7 @@ setup_booking() {
   GUEST="guest-$RUN@example.test"
   call POST /auth/signup "" "{\"email\":\"$manager\",\"password\":\"$PASSWORD\",\"name\":\"Smoke Manager\",\"accountType\":\"HOTEL_MANAGER\"}" >/dev/null
   manager_token="$(call POST /auth/login "" "{\"email\":\"$manager\",\"password\":\"$PASSWORD\"}" | json 'o.data.accessToken')"
-  HOTEL="$(call POST /admin/hotels "$manager_token" "{\"name\":\"Smoke Test Hotel $RUN\",\"city\":\"Smoke-$RUN\"}" | json 'o.data.id')"
+  HOTEL="$(call POST /admin/hotels "$manager_token" "{\"name\":\"Smoke Test Hotel $RUN\",\"placeId\":1259229}" | json 'o.data.id')"
   ROOM="$(call POST "/admin/hotels/$HOTEL/rooms" "$manager_token" '{"type":"Deluxe","basePrice":2500,"totalCount":1,"capacity":2}' | json 'o.data.id')"
   call PATCH "/admin/hotels/$HOTEL/activate" "$manager_token" >/dev/null
   call POST /auth/signup "" "{\"email\":\"$GUEST\",\"password\":\"$PASSWORD\",\"name\":\"Smoke Guest\"}" >/dev/null

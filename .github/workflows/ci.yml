@@ -139,6 +139,9 @@ jobs:
       # Builds both images and starts PostgreSQL, Redis, Kafka, Mailpit, the app and the notification service;
       # --wait fails the step unless every health check passes.
       - name: Start the stack
+        # Synthetic places: the smoke scripts create hotels with a made-up place id, so CI never calls the geocoding provider.
+        env:
+          PLACES_PROVIDER: synthetic
         run: docker compose up --build --detach --wait --wait-timeout 400
 
       - name: Smoke test the API

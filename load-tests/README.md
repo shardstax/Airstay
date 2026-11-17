@@ -87,9 +87,9 @@ Each file says which data, machine and script it used, and what it does not show
 some cancel). `run-booking-load.sh` runs it, then checks PostgreSQL for overbooking and samples database activity and
 container CPU. It creates its own hotels and users through the API ("Load Hotel <run id> n") and needs:
 
-- **Fake payments and no rate limit**, otherwise you measure Stripe and the rate limiter, not the booking code:
-  `PAYMENTS_FAKE=true RATE_LIMIT_ENABLED=false docker compose up -d --build --wait app`
-  (the fake refuses to start with the `prod` profile). Use `--build`: a stale image silently keeps the real provider.
+- **Fake payments, no rate limit and synthetic places**, otherwise you measure Stripe, the rate limiter and the geocoding provider (hotels are created in real places, which needs the Internet and a real place id), not the booking code:
+  `PAYMENTS_FAKE=true RATE_LIMIT_ENABLED=false PLACES_PROVIDER=synthetic docker compose up -d --build --wait app`
+  (the fakes refuse to start with the `prod` profile). The scripts create hotels with a made-up `placeId` and room types from the catalog (`Standard`, `Deluxe`, ...). Use `--build`: a stale image silently keeps the real provider.
 - The webhook secret is read from the running app, so the signed events pass the real signature check.
 
 ```bash

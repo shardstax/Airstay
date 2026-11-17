@@ -90,6 +90,8 @@ services:
       SERVER_FORWARD_HEADERS_STRATEGY: framework
       # Switches used by the load tests (load-tests/README.md); the defaults keep normal behaviour.
       PAYMENTS_FAKE: "${PAYMENTS_FAKE:-false}"
+      # open-meteo (real places, needs the Internet) or synthetic (any place id: load tests, CI and demos without Internet only).
+      PLACES_PROVIDER: "${PLACES_PROVIDER:-open-meteo}"
       RATE_LIMIT_ENABLED: "${RATE_LIMIT_ENABLED:-true}"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/api/v1/actuator/health"]

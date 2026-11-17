@@ -128,15 +128,20 @@ function signUpAndLogin(email, name, accountType) {
   return response.json('data.accessToken');
 }
 
-function createHotel(managerToken, index, city, stocks) {
+// Room types must come from the catalog (GET /catalog).
+const ROOM_TYPES = ['Standard', 'Deluxe', 'Superior', 'Suite', 'Family', 'Studio', 'Villa', 'Dormitory'];
+
+// placeId: any number, because the app runs with PLACES_PROVIDER=synthetic for load tests (see README section 6).
+function createHotel(managerToken, index, placeId, stocks) {
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${managerToken}` };
-  let response = http.post(`${BASE}/admin/hotels`, JSON.stringify({ name: `Load Hotel ${RUN_ID} ${index}`, city }), { headers });
+  let response = http.post(`${BASE}/admin/hotels`, JSON.stringify({ name: `Load Hotel ${RUN_ID} ${index}`, placeId }), { headers });
   if (response.status !== 201) fail(`create hotel failed: HTTP ${response.status} ${response.body}`);
   const hotelId = response.json('data.id');
+  const city = response.json('data.city'); // the place label the server derived: what search matches on
   const rooms = [];
   stocks.forEach((stock, roomIndex) => {
     response = http.post(`${BASE}/admin/hotels/${hotelId}/rooms`, JSON.stringify({
-      type: `Room type ${roomIndex}`, basePrice: 1500 + roomIndex * 500, totalCount: stock, capacity: 2 }), { headers });
+      type: ROOM_TYPES[roomIndex % ROOM_TYPES.length], basePrice: 1500 + roomIndex * 500, totalCount: stock, capacity: 2 }), { headers });
     if (response.status !== 201) fail(`create room failed: HTTP ${response.status} ${response.body}`);
     rooms.push({ id: response.json('data.id'), stock });
   });
@@ -152,10 +157,10 @@ export function setup() {
 
   const hotels = [];
   if (MODE === 'contention') {
-    hotels.push(createHotel(managerToken, 0, `Load-${RUN_ID}-hot`, STOCKS));
+    hotels.push(createHotel(managerToken, 0, 3_000_000 + (Number(RUN_ID) % 1_000_000) * 100, STOCKS));
   } else {
     for (let i = 0; i < HOTELS; i++) {
-      hotels.push(createHotel(managerToken, i, `Load-${RUN_ID}-${i % CITIES}`, Array(ROOMS).fill(STOCK)));
+      hotels.push(createHotel(managerToken, i, 3_000_000 + (Number(RUN_ID) % 1_000_000) * 100 + (i % CITIES), Array(ROOMS).fill(STOCK)));
     }
   }
 

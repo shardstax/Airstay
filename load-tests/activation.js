@@ -15,6 +15,8 @@ import { Trend } from 'k6/metrics';
 
 const BASE_URL = __ENV.BASE_URL || 'http://app:8080/api/v1';
 const ROOMS = parseInt(__ENV.ROOMS || '4', 10);
+// Room types must come from the catalog (GET /catalog); the app must run with PLACES_PROVIDER=synthetic (see README section 1).
+const ROOM_TYPES = ['Standard', 'Deluxe', 'Superior', 'Suite', 'Family', 'Studio', 'Villa', 'Dormitory'];
 const ITERATIONS = parseInt(__ENV.ITERATIONS || '30', 10);
 const LABEL = __ENV.LABEL || 'activation';
 
@@ -46,13 +48,13 @@ export default function (data) {
   const unique = `${__ITER}-${Date.now()}`;
 
   let response = http.post(`${BASE_URL}/admin/hotels`,
-    JSON.stringify({ name: `Bench Hotel ${unique}`, city: `Bench-${unique}` }), { headers });
+    JSON.stringify({ name: `Bench Hotel ${unique}`, placeId: 5_000_000 + __ITER + (Date.now() % 1_000_000_000) }), { headers });
   check(response, { 'hotel created (201)': (r) => r.status === 201 });
   const hotelId = response.json('data.id');
 
   for (let room = 0; room < ROOMS; room++) {
     response = http.post(`${BASE_URL}/admin/hotels/${hotelId}/rooms`,
-      JSON.stringify({ type: `Room type ${room}`, basePrice: 1500 + room * 500, totalCount: 5, capacity: 2 }), { headers });
+      JSON.stringify({ type: ROOM_TYPES[room % ROOM_TYPES.length], basePrice: 1500 + room * 500, totalCount: 5, capacity: 2 }), { headers });
     check(response, { 'room created (201)': (r) => r.status === 201 });
   }
 
