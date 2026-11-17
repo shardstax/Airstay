@@ -1,0 +1,33 @@
+package com.shardx.hotelManagement.notification.support;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.kafka.KafkaContainer;
+import org.testcontainers.utility.DockerImageName;
+
+/** One Kafka and one Redis container for the whole test run (beans of the cached test context). */
+@TestConfiguration(proxyBeanMethods = false)
+public class TestcontainersConfiguration {
+
+    @Bean
+    @ServiceConnection(name = "redis")
+    GenericContainer<?> redisContainer() {
+        return new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
+    }
+
+    /**
+     * Same broker image as docker-compose.yml.
+     *
+     * <p>Testcontainers' KafkaContainer sets the listeners to 0.0.0.0, and apache/kafka 3.9 then refuses to start
+     * ("advertised.listeners cannot use the nonroutable meta-address 0.0.0.0"). Listeners with an empty host mean the
+     * same thing (all interfaces) and are accepted.
+     */
+    @Bean
+    @ServiceConnection
+    KafkaContainer kafkaContainer() {
+        return new KafkaContainer(DockerImageName.parse("apache/kafka:3.9.0"))
+                .withEnv("KAFKA_LISTENERS", "PLAINTEXT://:9092,BROKER://:9093,CONTROLLER://:9094");
+    }
+}
