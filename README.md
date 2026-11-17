@@ -127,16 +127,23 @@ Flyway creates the schema on first start (`src/main/resources/db/migration`). Hi
 ./mvnw verify   # unit + integration tests (needs Docker) + coverage report in target/site/jacoco
 ```
 
+**110 automated tests** (63 unit + 47 integration).
+
 - **Unit tests** (`*Test`, JUnit 5 + Mockito): every pricing rule and how they stack, JWT type and
-  tamper checks, and the booking state machine (holds, guests, payment, webhook idempotency, refunds
-  after commit, expiry, cancellation).
-- **Integration tests** (`*IT`): the real app over HTTP against PostgreSQL 16 in Testcontainers, migrated
+  tamper checks, the booking state machine (holds, guests, payment, webhook idempotency, refunds
+  after commit, expiry, cancellation, `Idempotency-Key` claim and replay), the search cache (hit, miss, TTL, Redis
+  down, corrupt entry, 20 concurrent misses = 1 database query) and the Redis circuit breaker.
+- **Integration tests** (`*IT`): the real app over HTTP against PostgreSQL 16 and Redis in Testcontainers, migrated
   by Flyway. Only Stripe is mocked; webhooks are sent with real Stripe signatures.
   - Full journey: search, hold, guests, payment, webhook, duplicate webhook, cancel and refund, with
     inventory counts checked in the database after every step.
   - Concurrency: 25 simultaneous requests for the last room give exactly one booking; 30 simultaneous
     overlapping stays never put any night over capacity and never deadlock.
   - Hold expiry, security rules (401/403, refresh-token misuse, ownership) and error responses.
+  - Safe retries: the same `Idempotency-Key` twice gives one booking and one hold; 10 simultaneous retries give exactly
+    one booking; a different request or a failed attempt behaves correctly.
+  - Redis: a stale cached search never causes an overbooking; the rate limit is shared between two independent
+    connections, exactly 10 of 50 simultaneous requests pass, and the window resets.
 - **CI**: GitHub Actions runs `./mvnw verify` on every push and pull request, then builds the Docker image,
   starts the compose stack and smoke-tests the running API.
 
