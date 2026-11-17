@@ -7,9 +7,9 @@ time-limited room holds, layered dynamic pricing and Stripe Checkout payments.
 
 ## Tech stack
 
-Java 21 · Spring Boot 3.5 · Spring Data JPA (Hibernate) · Spring Security + JWT · PostgreSQL · Flyway ·
+Java 21 · Spring Boot 3.5 · Spring Data JPA (Hibernate) · Spring Security + JWT · PostgreSQL · Redis · Flyway ·
 Stripe Checkout + webhooks · Bean Validation · springdoc OpenAPI · JUnit 5 · Mockito · Testcontainers ·
-JaCoCo · GitHub Actions · Docker · Docker Compose · Spring Boot Actuator
+JaCoCo · k6 · GitHub Actions · Docker · Docker Compose · Spring Boot Actuator
 
 ## How booking works
 
@@ -38,6 +38,13 @@ Correctness rules:
   is charged for 2 nights and the departure day stays bookable.
 - **Refunds after commit.** Cancellation commits first; the Stripe refund runs afterwards with an
   idempotency key, so a refund can never happen for a booking that is still active.
+- **Safe retries (`Idempotency-Key`).** A client that times out can repeat `POST /bookings/init` with the same
+  `Idempotency-Key` header and gets the *same* booking back (header `Idempotent-Replayed: true`) instead of a second
+  hold. The same key with a different request is refused (409). The key is saved in PostgreSQL in the **same
+  transaction** as the booking (`INSERT ... ON CONFLICT DO NOTHING` makes simultaneous retries wait for the first
+  one), so a crash can never leave a booking without its key or the reverse. A failed attempt (for example sold out)
+  rolls the key back, so it can be retried. Keys expire after 24 hours. This is deliberately not in Redis: Redis cannot
+  take part in the booking transaction.
 
 ## Pricing
 
@@ -53,6 +60,29 @@ and immediately after an owner changes a room price or surge factor.
 - Deny-by-default rules: only auth, webhook, docs and `GET /hotels/**` are public; `/admin/**` needs
   `HOTEL_MANAGER`. Every hotel, room, inventory, guest and booking operation checks ownership.
 - CORS is enforced by Spring Security for the configured frontend origins.
+- Rate limiting (see below): login, sign-up and booking attempts are limited per e-mail, address or user, answered
+  with `429` and a `Retry-After` header.
+
+## Redis: what it is used for, and what it is not
+
+Redis is an **optional accelerator**, never the source of truth. PostgreSQL decides what is available and what is booked.
+
+| Use | What it does | Measured effect |
+|---|---|---|
+| **Search cache** | Caches `GET /hotels/search` results for 30 s (plus or minus 20%) | Capacity **945 to 2,119 searches/s (2.24x)**; at 600 searches/s p95 **82 ms to 10 ms** with no dropped requests ([results](load-tests/results/with-cache.md)) |
+| **Rate limiting** | Counts requests per key in Redis (atomic Lua script), shared by every app instance | Login: 10/min per e-mail and 30/min per address; sign-up: 10/min per address; booking: 20/min per user |
+
+- **Why the cache is safe:** booking never reads it, it locks the inventory rows in PostgreSQL. A cached result can be at most
+  one TTL old, so at worst it lists a hotel that then answers 409. It can never cause an overbooking (`SearchCacheIT`).
+- **If Redis is down:** nothing fails. The cache falls back to PostgreSQL and the limiter lets requests through. A circuit breaker
+  skips Redis for 10 s after three failures, so a dead Redis costs two or three slow requests and then nothing (checked live
+  by stopping the container).
+- **Not used for:** inventory counts or room holds (they must be transactional with bookings in PostgreSQL), distributed locks,
+  or idempotency keys (see above).
+- **Honest limits:** at 100 searches/s search was already fast (p95 about 6 ms), so only the median improves there; the gain is
+  capacity headroom. Fixed-window rate limiting allows up to twice the limit across a window boundary.
+- Settings: `SEARCH_CACHE_ENABLED`, `RATE_LIMIT_ENABLED`, `REDIS_HOST`, `REDIS_PORT` (see `.env.example`).
+  Measure it yourself with [`load-tests/`](load-tests/README.md) (k6 in Docker, SQL seed for 439,200 inventory rows).
 
 ## Running with Docker (recommended)
 
@@ -116,7 +146,7 @@ Flyway creates the schema on first start (`src/main/resources/db/migration`). Hi
 |---|---|
 | Auth | `POST /auth/signup` (guest or `HOTEL_MANAGER`), `/auth/login`, `/auth/refresh`, `/auth/logout` |
 | Browse | `GET /hotels/search?city=&startDate=&endDate=&roomsCount=`, `GET /hotels/{id}/info?startDate=&endDate=` |
-| Booking | `POST /bookings/init`, `/{id}/addGuests`, `/{id}/payments`, `/{id}/cancel`, `GET /{id}/status` |
+| Booking | `POST /bookings/init` (optional `Idempotency-Key` header), `/{id}/addGuests`, `/{id}/payments`, `/{id}/cancel`, `GET /{id}/status` |
 | User | `GET/PATCH /users/profile`, `GET /users/myBookings`, CRUD `/users/guests` |
 | Manager | `/admin/hotels` CRUD + `activate`, `bookings`, `reports`; `/admin/hotels/{id}/rooms`; `/admin/inventory/rooms/{id}` |
 
