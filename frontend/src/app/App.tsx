@@ -4,7 +4,9 @@ import { AccountPage } from '@/features/account/AccountPage';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { SignupPage } from '@/features/auth/SignupPage';
 import { DesignPage } from '@/features/design/DesignPage';
-import { HomePage } from '@/features/home/HomePage';
+import { HotelPage } from '@/features/hotel/HotelPage';
+import { HomePage } from '@/features/search/HomePage';
+import { SearchResultsPage } from '@/features/search/SearchResultsPage';
 import { GuestOnly } from '@/shared/session/GuestOnly';
 import { RequireAuth } from '@/shared/session/RequireAuth';
 import { SessionExpiredWatcher } from '@/shared/session/SessionExpiredWatcher';
@@ -26,6 +28,8 @@ export function App() {
       <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6">
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/search" element={<SearchResultsPage />} />
+          <Route path="/hotels/:hotelId" element={<HotelPage />} />
           <Route element={<GuestOnly />}>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />

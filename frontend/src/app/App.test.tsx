@@ -14,7 +14,6 @@ const restorableSession = {
   'POST /auth/refresh': { data: { accessToken: 'restored' } },
   'GET /users/profile': { data: ada },
 };
-const health = { 'GET /actuator/health': { raw: { status: 'UP' } } };
 const loginRoutes = {
   'POST /auth/login': { data: { accessToken: 'new-token' } },
   'GET /users/profile': { data: ada },
@@ -28,7 +27,7 @@ async function fillAndSubmitLogin(user: ReturnType<typeof userEvent.setup>) {
 
 describe('the app shell', () => {
   it('has a skip link and a main landmark', async () => {
-    mockApi({ ...noSession, 'GET /actuator/health': { raw: { status: 'UP' } } });
+    mockApi(noSession);
     renderRoute(<App />);
 
     expect(screen.getByRole('link', { name: /skip to content/i })).toHaveAttribute('href', '#main');
@@ -44,37 +43,9 @@ describe('the app shell', () => {
   });
 });
 
-describe('the home page API check', () => {
-  it('shows Connected when the health endpoint answers UP', async () => {
-    mockApi({ ...noSession, 'GET /actuator/health': { raw: { status: 'UP' } } });
-    renderRoute(<App />);
-
-    expect(await screen.findByText('Connected')).toBeInTheDocument();
-  });
-
-  it('shows Unreachable when the health endpoint is not UP', async () => {
-    mockApi({ ...noSession, 'GET /actuator/health': { status: 503, raw: { status: 'DOWN' } } });
-    renderRoute(<App />);
-
-    expect(await screen.findByText('Unreachable')).toBeInTheDocument();
-  });
-
-  it('shows Unreachable when the API cannot be reached', async () => {
-    mockApi({
-      ...noSession,
-      'GET /actuator/health': () => {
-        throw new TypeError('network down');
-      },
-    });
-    renderRoute(<App />);
-
-    expect(await screen.findByText('Unreachable')).toBeInTheDocument();
-  });
-});
-
 describe('a visitor who is not signed in', () => {
   it('makes no refresh request, since there is no session to restore', async () => {
-    const backend = mockApi({ ...noSession, 'GET /actuator/health': { raw: { status: 'UP' } } });
+    const backend = mockApi(noSession);
     renderRoute(<App />);
 
     await screen.findByRole('link', { name: 'Sign in' });
@@ -223,7 +194,6 @@ describe('signing up', () => {
       ...noSession,
       'POST /auth/signup': { status: 201, data: ada },
       ...loginRoutes,
-      ...health,
     });
     const user = userEvent.setup();
     renderRoute(<App />, { route: '/signup' });
@@ -232,9 +202,11 @@ describe('signing up', () => {
     await fillSignup(user);
 
     expect(await screen.findByRole('link', { name: 'Ada Lovelace' })).toBeInTheDocument();
-    expect(
-      backend.keys().filter((key) => key !== 'POST /auth/refresh' && key !== 'GET /actuator/health'),
-    ).toEqual(['POST /auth/signup', 'POST /auth/login', 'GET /users/profile']);
+    expect(backend.keys().filter((key) => key !== 'POST /auth/refresh')).toEqual([
+      'POST /auth/signup',
+      'POST /auth/login',
+      'GET /users/profile',
+    ]);
   });
 
   it('shows the server message when the email is already registered', async () => {

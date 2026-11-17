@@ -3,8 +3,7 @@ import { Link } from 'react-router-dom';
 import { useLogout } from '@/features/auth/useAuthActions';
 import { useSession } from '@/shared/session/session';
 import { Button } from '@/shared/ui/Button';
-
-const linkClass = 'inline-flex h-10 items-center rounded-lg px-4 text-sm font-medium';
+import { LinkButton } from '@/shared/ui/LinkButton';
 
 export function Header() {
   const { user, isLoading } = useSession();
@@ -21,9 +20,9 @@ export function Header() {
         <nav aria-label="Account" className="flex items-center gap-2">
           {isLoading ? null : user ? (
             <>
-              <Link to="/account" className={`${linkClass} text-ink hover:bg-canvas`}>
+              <LinkButton to="/account" variant="ghost" className="text-ink">
                 {user.name}
-              </Link>
+              </LinkButton>
               <Button
                 variant="secondary"
                 loading={logout.isPending}
@@ -36,12 +35,10 @@ export function Header() {
             </>
           ) : (
             <>
-              <Link to="/login" className={`${linkClass} text-ink hover:bg-canvas`}>
+              <LinkButton to="/login" variant="ghost" className="text-ink">
                 Sign in
-              </Link>
-              <Link to="/signup" className={`${linkClass} bg-brand-600 text-white hover:bg-brand-700`}>
-                Create account
-              </Link>
+              </LinkButton>
+              <LinkButton to="/signup">Create account</LinkButton>
             </>
           )}
         </nav>
