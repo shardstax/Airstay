@@ -82,8 +82,8 @@ public class RoomServiceImpl implements RoomService {
         roomRepository.deleteById(roomId);
 
         if (Boolean.TRUE.equals(hotel.getActive())) {
-            // Recompute the hotel's "from" price so search stops showing the deleted room's price.
-            pricingUpdateService.updateHotelPrices(hotel);
+            // Recompute the hotel's "from" price (after this transaction commits) so search stops showing the deleted room's price.
+            pricingUpdateService.refreshAfterCommit(hotel.getId());
         }
     }
 
@@ -107,7 +107,8 @@ public class RoomServiceImpl implements RoomService {
                 inventoryService.updateRoomCapacity(room, room.getTotalCount());
             }
             if (previousBasePrice.compareTo(room.getBasePrice()) != 0) {
-                pricingUpdateService.updateHotelPrices(hotel);
+                // After this transaction commits: a capacity change above holds locks on the room's nights until then.
+                pricingUpdateService.refreshAfterCommit(hotel.getId());
             }
         }
         return modelMapper.map(room, RoomDto.class);

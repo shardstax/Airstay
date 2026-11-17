@@ -1,7 +1,13 @@
 package com.shardx.hotelManagement.airBnb.pricing;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.shardx.hotelManagement.airBnb.support.IntegrationTestBase;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -16,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 abstract class PricingTestBase extends IntegrationTestBase {
 
-    protected record Hotel(long id, String city, long standardRoomId, long suiteRoomId) {
+    protected record Hotel(long id, String city, long standardRoomId, long suiteRoomId, String managerToken) {
     }
 
     protected Hotel activeHotelWithTwoRoomTypes() {
@@ -30,7 +36,15 @@ abstract class PricingTestBase extends IntegrationTestBase {
                 "type", "Suite", "basePrice", "2500.00", "totalCount", 10, "capacity", 4))).path("id").asLong();
         assertThat(patch("/admin/hotels/" + hotelId + "/activate", manager).getStatusCode())
                 .isEqualTo(HttpStatus.NO_CONTENT);
-        return new Hotel(hotelId, city, standard, suite);
+        return new Hotel(hotelId, city, standard, suite, manager);
+    }
+
+    /** PUT, PATCH or DELETE with a JSON body (the base class only has the bodiless variants). */
+    protected ResponseEntity<JsonNode> send(HttpMethod method, String path, String token, Object body) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(token);
+        return rest.exchange(path, method, new HttpEntity<>(body, headers), JsonNode.class);
     }
 
     protected long count(String sql, Object... args) {

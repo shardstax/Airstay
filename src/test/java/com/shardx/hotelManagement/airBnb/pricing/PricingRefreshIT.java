@@ -3,8 +3,9 @@ package com.shardx.hotelManagement.airBnb.pricing;
 import com.shardx.hotelManagement.airBnb.service.PricingUpdateService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 
-import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
@@ -15,7 +16,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The price refresh reads a hotel's nights in one query and writes with set-based statements. These tests pin down what
  * must NOT change: prices follow the pricing rules, the hotel's "from" price is its cheapest room, and a refresh only
- * writes the rows whose price really changed (an hourly run in which nothing changed writes nothing).
+ * writes the rows whose price really changed (an hourly run in which nothing changed writes nothing). They also check
+ * that owner changes show up in the prices by the time the owner's request returns.
+ *
+ * <p>"Written" is judged by PostgreSQL's row version ({@code xmin}), which changes whenever a row is rewritten, whatever
+ * columns the statement touched and whatever the clock says.
  */
 class PricingRefreshIT extends PricingTestBase {
 
@@ -34,8 +39,8 @@ class PricingRefreshIT extends PricingTestBase {
                 hotel.standardRoomId(), surgeNight);
         jdbc.update("UPDATE inventory SET booked_count = 9 WHERE room_id = ? AND date = ?",
                 hotel.suiteRoomId(), busyNight);
-        Map<Long, Timestamp> inventoryBefore = updatedAtOfInventory(hotel.id());
-        Map<Long, Timestamp> fromPricesBefore = updatedAtOfFromPrices(hotel.id());
+        Map<Long, String> inventoryBefore = rowVersions("inventory", hotel.id());
+        Map<Long, String> fromPricesBefore = rowVersions("hotel_min_price", hotel.id());
 
         pricingUpdateService.updateHotelPrices(hotel.id());
 
@@ -46,53 +51,108 @@ class PricingRefreshIT extends PricingTestBase {
         assertThat(nightPrice(hotel.suiteRoomId(), busyNight)).isEqualByComparingTo("3000.00");
         assertThat(fromPrice(hotel.id(), busyNight)).isEqualByComparingTo("2000.00");
 
-        // Only the two changed nights and the one changed "from" price were written; everything else is untouched.
-        Map<Long, Timestamp> inventoryAfter = updatedAtOfInventory(hotel.id());
-        long inventoryRowsWritten = inventoryBefore.entrySet().stream()
-                .filter(entry -> !entry.getValue().equals(inventoryAfter.get(entry.getKey()))).count();
-        assertThat(inventoryRowsWritten).as("inventory rows written by the refresh").isEqualTo(2);
-        Map<Long, Timestamp> fromPricesAfter = updatedAtOfFromPrices(hotel.id());
-        long fromPricesWritten = fromPricesBefore.entrySet().stream()
-                .filter(entry -> !entry.getValue().equals(fromPricesAfter.get(entry.getKey()))).count();
-        assertThat(fromPricesWritten).as("'from' prices written by the refresh").isEqualTo(1);
+        // Only the two changed nights and the one changed "from" price were rewritten; everything else is untouched.
+        // (The test's own UPDATEs above already changed two inventory rows, so compare against the state after them.)
+        Map<Long, String> inventoryAfter = rowVersions("inventory", hotel.id());
+        assertThat(rewrittenRows(inventoryBefore, inventoryAfter)).as("inventory rows rewritten by the refresh").isEqualTo(2);
+        Map<Long, String> fromPricesAfter = rowVersions("hotel_min_price", hotel.id());
+        assertThat(rewrittenRows(fromPricesBefore, fromPricesAfter)).as("'from' prices rewritten by the refresh").isEqualTo(1);
 
-        // A second refresh with nothing new to do writes nothing at all.
+        // A second refresh with nothing new to do rewrites no row at all.
         pricingUpdateService.updateHotelPrices(hotel.id());
-        assertThat(updatedAtOfInventory(hotel.id())).isEqualTo(inventoryAfter);
-        assertThat(updatedAtOfFromPrices(hotel.id())).isEqualTo(fromPricesAfter);
+        assertThat(rowVersions("inventory", hotel.id())).isEqualTo(inventoryAfter);
+        assertThat(rowVersions("hotel_min_price", hotel.id())).isEqualTo(fromPricesAfter);
     }
 
     @Test
-    void theScheduledRefreshFixesEveryHotelAndSkipsHotelsWithoutInventory() {
+    void theScheduledRefreshFixesEveryHotelAcrossSeveralPagesAndSkipsHotelsWithoutInventory() {
+        // The test profile reads hotel ids 2 at a time, so these hotels (plus any other test's) span several pages.
         Hotel first = activeHotelWithTwoRoomTypes();
         Hotel second = activeHotelWithTwoRoomTypes();
-        // A hotel that was never activated has no inventory: the refresh must simply skip it.
+        Hotel third = activeHotelWithTwoRoomTypes();
+        // A hotel that was never activated has no inventory: the refresh must skip it without failing.
         String manager = newManagerToken();
-        post("/admin/hotels", manager, Map.of("name", "Not live", "city", "Draft-" + UUID.randomUUID()));
+        long draftId = data(post("/admin/hotels", manager, Map.of("name", "Not live", "city", "Draft-" + UUID.randomUUID())))
+                .path("id").asLong();
         LocalDate night = LocalDate.now().plusDays(50);
-        jdbc.update("UPDATE inventory SET price = 1.00 WHERE room_id = ? AND date = ?", first.standardRoomId(), night);
-        jdbc.update("UPDATE inventory SET price = 1.00 WHERE room_id = ? AND date = ?", second.suiteRoomId(), night);
+        for (Hotel hotel : new Hotel[]{first, second, third}) {
+            // Both the nightly price and the hotel's "from" price are wrong; the refresh has to repair both.
+            jdbc.update("UPDATE inventory SET price = 1.00 WHERE hotel_id = ? AND date = ?", hotel.id(), night);
+            jdbc.update("UPDATE hotel_min_price SET price = 1.00 WHERE hotel_id = ? AND date = ?", hotel.id(), night);
+        }
 
-        pricingUpdateService.updatePrices();
+        PricingUpdateService.RefreshResult result = pricingUpdateService.updatePrices();
 
-        assertThat(nightPrice(first.standardRoomId(), night)).isEqualByComparingTo("2000.00");
-        assertThat(nightPrice(second.suiteRoomId(), night)).isEqualByComparingTo("2500.00");
-        assertThat(fromPrice(first.id(), night)).isEqualByComparingTo("2000.00");
+        assertThat(result.failed()).as("hotels whose refresh failed").isZero();
+        assertThat(result.hotels()).as("hotels visited, in several pages of 2").isGreaterThanOrEqualTo(4);
+        for (Hotel hotel : new Hotel[]{first, second, third}) {
+            assertThat(nightPrice(hotel.standardRoomId(), night)).isEqualByComparingTo("2000.00");
+            assertThat(nightPrice(hotel.suiteRoomId(), night)).isEqualByComparingTo("2500.00");
+            assertThat(fromPrice(hotel.id(), night)).isEqualByComparingTo("2000.00");
+        }
+        assertThat(count("SELECT count(*) FROM hotel_min_price WHERE hotel_id = ?", draftId))
+                .as("a hotel without inventory gets no 'from' prices").isZero();
     }
 
-    private Map<Long, Timestamp> updatedAtOfInventory(long hotelId) {
-        return updatedAt("SELECT id, updated_at FROM inventory WHERE hotel_id = ?", hotelId);
+    // ---- owner changes: prices are up to date when the owner's request returns -----------------------------
+
+    @Test
+    void anOwnersSurgeFactorChangesThePricesBeforeTheResponseReturns() {
+        Hotel hotel = activeHotelWithTwoRoomTypes();
+        LocalDate from = LocalDate.now().plusDays(30);
+
+        var response = send(HttpMethod.PATCH, "/admin/inventory/rooms/" + hotel.standardRoomId(), hotel.managerToken(), Map.of(
+                "startDate", from.toString(), "endDate", from.plusDays(1).toString(), "surgeFactor", "1.50", "closed", false));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(nightPrice(hotel.standardRoomId(), from)).isEqualByComparingTo("3000.00");
+        assertThat(nightPrice(hotel.standardRoomId(), from.plusDays(1))).isEqualByComparingTo("3000.00");
+        assertThat(nightPrice(hotel.standardRoomId(), from.plusDays(2))).isEqualByComparingTo("2000.00");
+        assertThat(fromPrice(hotel.id(), from)).as("the suite is now the cheapest room").isEqualByComparingTo("2500.00");
+        assertThat(fromPrice(hotel.id(), from.plusDays(2))).isEqualByComparingTo("2000.00");
     }
 
-    private Map<Long, Timestamp> updatedAtOfFromPrices(long hotelId) {
-        return updatedAt("SELECT id, updated_at FROM hotel_min_price WHERE hotel_id = ?", hotelId);
+    @Test
+    void changingARoomsBasePriceRefreshesThePricesAfterTheOwnersTransaction() {
+        Hotel hotel = activeHotelWithTwoRoomTypes();
+        LocalDate night = LocalDate.now().plusDays(60);
+
+        var response = send(HttpMethod.PUT, "/admin/hotels/" + hotel.id() + "/rooms/" + hotel.standardRoomId(),
+                hotel.managerToken(), Map.of("type", "Standard", "basePrice", "1800.00", "totalCount", 10, "capacity", 2));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(nightPrice(hotel.standardRoomId(), night)).isEqualByComparingTo("1800.00");
+        assertThat(fromPrice(hotel.id(), night)).isEqualByComparingTo("1800.00");
+        assertThat(nightPrice(hotel.suiteRoomId(), night)).as("the other room type is untouched").isEqualByComparingTo("2500.00");
     }
 
-    private Map<Long, Timestamp> updatedAt(String sql, long hotelId) {
-        Map<Long, Timestamp> result = new HashMap<>();
-        jdbc.query(sql, rs -> {
-            result.put(rs.getLong("id"), rs.getTimestamp("updated_at"));
-        }, hotelId);
-        return result;
+    @Test
+    void deletingARoomRemovesItsPriceFromTheHotelsFromPrice() {
+        Hotel hotel = activeHotelWithTwoRoomTypes();
+        LocalDate night = LocalDate.now().plusDays(60);
+        assertThat(fromPrice(hotel.id(), night)).isEqualByComparingTo("2000.00");
+
+        var response = send(HttpMethod.DELETE, "/admin/hotels/" + hotel.id() + "/rooms/" + hotel.standardRoomId(),
+                hotel.managerToken(), null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(count("SELECT count(*) FROM inventory WHERE room_id = ?", hotel.standardRoomId())).isZero();
+        assertThat(fromPrice(hotel.id(), night)).as("only the suite is left").isEqualByComparingTo("2500.00");
+    }
+
+    // ---- helpers ---------------------------------------------------------------------------------------------
+
+    /** id -> PostgreSQL row version. The version changes when a row is rewritten, whichever columns changed. */
+    private Map<Long, String> rowVersions(String table, long hotelId) {
+        Map<Long, String> versions = new HashMap<>();
+        jdbc.query("SELECT id, xmin::text AS version FROM " + table + " WHERE hotel_id = ?",
+                rs -> {
+                    versions.put(rs.getLong("id"), rs.getString("version"));
+                }, hotelId);
+        return versions;
+    }
+
+    private static long rewrittenRows(Map<Long, String> before, Map<Long, String> after) {
+        return before.entrySet().stream().filter(entry -> !entry.getValue().equals(after.get(entry.getKey()))).count();
     }
 }

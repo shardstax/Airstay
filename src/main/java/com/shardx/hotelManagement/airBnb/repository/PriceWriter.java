@@ -29,6 +29,26 @@ public class PriceWriter {
     }
 
     /**
+     * Takes a lock that only one price refresh per hotel can hold at a time, until the transaction ends. Waits if another
+     * refresh of the same hotel is running.
+     *
+     * <p>Without it, two refreshes of one hotel (the hourly job and one started by an owner's change) could each read the
+     * data, and the slower one would then overwrite the newer result with prices computed from older data. Taking the lock
+     * BEFORE reading means the second refresh reads what the first one wrote. The key is a hash of a text that names the
+     * purpose, so it cannot clash with any other use of advisory locks.
+     */
+    public void lockHotelForPriceRefresh(long hotelId) {
+        jdbc.execute((java.sql.Connection connection) -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(CAST(? AS text), 0))")) {
+                statement.setString(1, "airstay:price-refresh:" + hotelId);
+                statement.executeQuery().close();
+            }
+            return null;
+        });
+    }
+
+    /**
      * Sets the price of the given inventory rows: the rows are locked in id order first, then updated in one statement.
      *
      * <p>Why the explicit lock: a single UPDATE locks the rows in whatever order PostgreSQL visits them, while bookings

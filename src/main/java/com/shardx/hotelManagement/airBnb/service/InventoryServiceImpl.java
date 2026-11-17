@@ -120,8 +120,9 @@ public class InventoryServiceImpl implements InventoryService {
                 updateInventoryRequestDto.getEndDate(), updateInventoryRequestDto.getClosed(),
                 updateInventoryRequestDto.getSurgeFactor());
 
-        // A new surge factor changes nightly prices; refresh them now instead of waiting for the hourly job.
-        pricingUpdateService.updateHotelPrices(hotel);
+        // A new surge factor changes nightly prices; refresh them right after this transaction commits (it holds locks on
+        // the room's nights until then) instead of waiting for the hourly job.
+        pricingUpdateService.refreshAfterCommit(hotel.getId());
     }
 
     @Override
