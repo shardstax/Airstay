@@ -84,6 +84,9 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       PRICING_HOLIDAYS: ${PRICING_HOLIDAYS:-2026-12-25,2026-12-31,2027-01-01,2027-01-26,2027-08-15,2027-10-02}
       PRICING_REFRESH_CRON: "${PRICING_REFRESH_CRON:-0 0 * * * *}"
+      # Switches used by the load tests (load-tests/README.md); the defaults keep normal behaviour.
+      PAYMENTS_FAKE: "${PAYMENTS_FAKE:-false}"
+      RATE_LIMIT_ENABLED: "${RATE_LIMIT_ENABLED:-true}"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/api/v1/actuator/health"]
       interval: 10s
