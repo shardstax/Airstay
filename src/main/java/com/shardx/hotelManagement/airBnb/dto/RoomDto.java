@@ -1,5 +1,8 @@
 package com.shardx.hotelManagement.airBnb.dto;
 
+import com.shardx.hotelManagement.airBnb.catalog.Catalog;
+import com.shardx.hotelManagement.airBnb.catalog.HttpsUrls;
+import com.shardx.hotelManagement.airBnb.catalog.InCatalog;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 import lombok.Data;
@@ -12,8 +15,9 @@ public class RoomDto {
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private Long id;
 
+    /** One of the room types listed by {@code GET /catalog}. */
     @NotBlank
-    @Size(max = 255)
+    @InCatalog(Catalog.Kind.ROOM_TYPE)
     private String type;
 
     @NotNull
@@ -21,8 +25,11 @@ public class RoomDto {
     @Digits(integer = 8, fraction = 2)
     private BigDecimal basePrice;
 
+    @HttpsUrls
     private String[] photos;
 
+    @InCatalog(Catalog.Kind.ROOM_AMENITY)
+    @Size(max = 15)
     private String[] amenities;
 
     @NotNull

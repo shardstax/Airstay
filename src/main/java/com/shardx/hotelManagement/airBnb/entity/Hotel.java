@@ -25,6 +25,10 @@ public class Hotel {
 
     private String city;
 
+    /** The provider id of the real place the hotel is in; null only for hotels created before places existed. */
+    @Column(name = "place_id")
+    private Long placeId;
+
     @Column(columnDefinition = "TEXT[]")
     private String[] photos;
 

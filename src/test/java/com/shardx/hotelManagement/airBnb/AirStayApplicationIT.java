@@ -85,15 +85,20 @@ class AirStayApplicationIT extends IntegrationTestBase {
         assertRequired(schemas, "HotelPriceResponseDto", "id", "name", "city", "price");
         assertRequired(schemas, "RoomPriceResponseDto", "id", "type", "price");
         assertRequired(schemas, "HotelInfoDto", "hotel", "rooms");
-        assertRequired(schemas, "BookingDto", "id", "hotelId", "roomId", "roomsCount", "checkInDate", "checkOutDate",
+        assertRequired(schemas, "BookingDto", "id", "hotelId", "hotelName", "roomId", "roomType", "roomsCount", "checkInDate", "checkOutDate", "maxGuests",
                 "bookingStatus", "amount");
         assertRequired(schemas, "UserDto", "id", "email", "name", "roles");
         assertRequired(schemas, "LoginResponseDto", "accessToken");
         assertRequired(schemas, "BookingStatusResponseDto", "bookingStatus");
+        assertRequired(schemas, "PlaceDto", "id", "name", "country", "countryCode", "latitude", "longitude", "label");
+        assertRequired(schemas, "CatalogDto", "hotelAmenities", "roomAmenities", "roomTypes");
+        assertRequired(schemas, "HotelDto", "name", "placeId");
         assertRequired(schemas, "BookingPaymentInitResponseDto", "sessionUrl");
 
         assertThat(requiredNames(schemas, "HotelPriceResponseDto")).doesNotContain("photos", "amenities", "contactInfo");
         assertThat(requiredNames(schemas, "BookingDto")).doesNotContain("expiresAt", "guests");
+        assertThat(requiredNames(schemas, "PlaceDto")).doesNotContain("region");
+        assertThat(requiredNames(schemas, "HotelDto")).as("the city is derived from the place").doesNotContain("city");
     }
 
     private static void assertRequired(JsonNode schemas, String schema, String... fields) {

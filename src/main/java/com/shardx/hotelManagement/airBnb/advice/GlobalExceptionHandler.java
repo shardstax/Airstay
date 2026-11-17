@@ -6,6 +6,7 @@ import com.shardx.hotelManagement.airBnb.exception.PaymentProviderException;
 import com.shardx.hotelManagement.airBnb.exception.RateLimitExceededException;
 import com.shardx.hotelManagement.airBnb.exception.ResourceNotFoundException;
 import com.shardx.hotelManagement.airBnb.exception.UnAuthorisedException;
+import com.shardx.hotelManagement.airBnb.places.PlaceLookupException;
 import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -60,6 +61,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .header(HttpHeaders.RETRY_AFTER, String.valueOf(exception.getRetryAfterSeconds()))
                 .body(new ApiResponse<>(apiError));
+    }
+
+    @ExceptionHandler(PlaceLookupException.class)
+    public ResponseEntity<ApiResponse<?>> handlePlaceLookup(PlaceLookupException exception) {
+        log.warn("Place provider unavailable: {}", exception.getMessage(), exception.getCause());
+        return build(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage() + ", please try again in a moment");
     }
 
     @ExceptionHandler(PaymentProviderException.class)

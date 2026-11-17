@@ -141,13 +141,19 @@ public abstract class IntegrationTestBase {
 
     // ---- hotels -----------------------------------------------------------------------------
 
+    /** A place id nobody else uses: the test profile's synthetic provider accepts any id and invents a place for it. */
+    protected static long newPlaceId() {
+        return java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000L, 1_000_000_000_000L);
+    }
+
     /** Creates a hotel with one room type, activates it (one year of inventory + prices) and returns ids. */
     protected TestHotel createActiveHotel(String managerToken, int roomCount, String basePrice) {
-        String city = "City-" + UUID.randomUUID();
-
-        ResponseEntity<JsonNode> hotel = post("/admin/hotels", managerToken, Map.of("name", "Test Hotel", "city", city));
+        // Every hotel gets its own (synthetic) place, so a test that searches one city never sees another test's hotels.
+        ResponseEntity<JsonNode> hotel = post("/admin/hotels", managerToken,
+                Map.of("name", "Test Hotel", "placeId", newPlaceId()));
         assertThat(hotel.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         long hotelId = data(hotel).path("id").asLong();
+        String city = data(hotel).path("city").asText();
 
         ResponseEntity<JsonNode> room = post("/admin/hotels/" + hotelId + "/rooms", managerToken, Map.of(
                 "type", "Deluxe", "basePrice", basePrice, "totalCount", roomCount, "capacity", 2));

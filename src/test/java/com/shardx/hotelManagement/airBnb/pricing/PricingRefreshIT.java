@@ -72,7 +72,7 @@ class PricingRefreshIT extends PricingTestBase {
         Hotel third = activeHotelWithTwoRoomTypes();
         // A hotel that was never activated has no inventory: the refresh must skip it without failing.
         String manager = newManagerToken();
-        long draftId = data(post("/admin/hotels", manager, Map.of("name", "Not live", "city", "Draft-" + UUID.randomUUID())))
+        long draftId = data(post("/admin/hotels", manager, Map.of("name", "Not live", "placeId", newPlaceId())))
                 .path("id").asLong();
         LocalDate night = LocalDate.now().plusDays(50);
         for (Hotel hotel : new Hotel[]{first, second, third}) {

@@ -28,6 +28,8 @@ public class RateLimitProperties {
 
     /** Booking attempts per user: protects the inventory locks from a script hammering one room. */
     private Rule bookingInitPerUser = new Rule(20, Duration.ofMinutes(1));
+    /** Place searches per client address: the search box asks on every pause while typing, so this is generous. */
+    private Rule placesPerIp = new Rule(120, Duration.ofMinutes(1));
 
     /** At most {@code limit} requests per {@code window}. */
     @Data

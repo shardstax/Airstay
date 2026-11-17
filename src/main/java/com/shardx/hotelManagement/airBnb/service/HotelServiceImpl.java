@@ -2,11 +2,14 @@ package com.shardx.hotelManagement.airBnb.service;
 
 import com.shardx.hotelManagement.airBnb.dto.*;
 import com.shardx.hotelManagement.airBnb.entity.Hotel;
+import com.shardx.hotelManagement.airBnb.entity.HotelContactInfo;
 import com.shardx.hotelManagement.airBnb.entity.Room;
 import com.shardx.hotelManagement.airBnb.entity.User;
 import com.shardx.hotelManagement.airBnb.exception.ConflictException;
 import com.shardx.hotelManagement.airBnb.exception.ResourceNotFoundException;
 import com.shardx.hotelManagement.airBnb.exception.UnAuthorisedException;
+import com.shardx.hotelManagement.airBnb.places.PlaceDto;
+import com.shardx.hotelManagement.airBnb.places.PlaceService;
 import com.shardx.hotelManagement.airBnb.repository.BookingRepository;
 import com.shardx.hotelManagement.airBnb.repository.HotelMinPriceRepository;
 import com.shardx.hotelManagement.airBnb.repository.HotelRepository;
@@ -37,6 +40,7 @@ public class HotelServiceImpl implements HotelService {
     private final BookingRepository bookingRepository;
     private final HotelMinPriceRepository hotelMinPriceRepository;
     private final PricingUpdateService pricingUpdateService;
+    private final PlaceService placeService;
 
     @Override
     @Transactional
@@ -44,11 +48,25 @@ public class HotelServiceImpl implements HotelService {
         log.info("Creating a new hotel with name: {}", hotelDto.getName());
         Hotel hotel = modelMapper.map(hotelDto, Hotel.class);
         hotel.setId(null);      // never let a client choose (or overwrite) an id
+        applyPlace(hotel, placeService.require(hotelDto.getPlaceId()));
         hotel.setActive(false); // goes live only through activateHotel
         hotel.setOwner(getCurrentUser());
         hotel = hotelRepository.save(hotel);
         log.info("Created a new hotel with ID: {}", hotel.getId());
         return modelMapper.map(hotel, HotelDto.class);
+    }
+
+    /**
+     * The city is never taken from the client: it is the label of the real place they chose, so every hotel in Pune is
+     * stored as exactly "Pune, Maharashtra, India" and search can match on it.
+     */
+    private static void applyPlace(Hotel hotel, PlaceDto place) {
+        hotel.setPlaceId(place.getId());
+        hotel.setCity(place.getLabel());
+        if (hotel.getContactInfo() == null) {
+            hotel.setContactInfo(new HotelContactInfo());
+        }
+        hotel.getContactInfo().setLocation(place.getLatitude() + "," + place.getLongitude());
     }
 
     @Override
@@ -69,6 +87,7 @@ public class HotelServiceImpl implements HotelService {
         modelMapper.map(hotelDto, hotel);
         hotel.setId(id);
         hotel.setActive(active); // the active flag cannot be changed through an update
+        applyPlace(hotel, placeService.require(hotelDto.getPlaceId()));
         hotel = hotelRepository.save(hotel);
 
         if (!Objects.equals(previousCity, hotel.getCity())) {

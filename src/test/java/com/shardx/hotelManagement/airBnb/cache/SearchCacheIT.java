@@ -106,7 +106,9 @@ class SearchCacheIT extends IntegrationTestBase {
     }
 
     private Set<String> cacheKeys(String city) {
-        Set<String> keys = redis.keys(SearchCache.KEY_PREFIX + city + ":*");
+        // The cache key holds the URL-encoded city (place labels contain spaces and commas).
+        Set<String> keys = redis.keys(SearchCache.KEY_PREFIX
+                + java.net.URLEncoder.encode(city, java.nio.charset.StandardCharsets.UTF_8) + ":*");
         return keys == null ? Set.of() : keys;
     }
 }

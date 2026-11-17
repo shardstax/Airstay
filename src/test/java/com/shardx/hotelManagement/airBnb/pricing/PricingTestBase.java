@@ -27,9 +27,9 @@ abstract class PricingTestBase extends IntegrationTestBase {
 
     protected Hotel activeHotelWithTwoRoomTypes() {
         String manager = newManagerToken();
-        String city = "Pricing-" + UUID.randomUUID();
-        long hotelId = data(post("/admin/hotels", manager, Map.of("name", "Pricing Hotel", "city", city)))
-                .path("id").asLong();
+        JsonNode created = data(post("/admin/hotels", manager, Map.of("name", "Pricing Hotel", "placeId", newPlaceId())));
+        long hotelId = created.path("id").asLong();
+        String city = created.path("city").asText();
         long standard = data(post("/admin/hotels/" + hotelId + "/rooms", manager, Map.of(
                 "type", "Standard", "basePrice", "2000.00", "totalCount", 10, "capacity", 2))).path("id").asLong();
         long suite = data(post("/admin/hotels/" + hotelId + "/rooms", manager, Map.of(
