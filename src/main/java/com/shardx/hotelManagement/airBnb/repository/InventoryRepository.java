@@ -13,6 +13,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -26,6 +27,31 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long> {
     void deleteByRoom(Room room);
 
     List<Inventory> findByHotelAndDateBetween(Hotel hotel, LocalDate startDate, LocalDate endDate);
+
+    /**
+     * Creates one inventory row per night for a room, from today (offset 0) to today + lastDayOffset, in ONE statement
+     * (the database generates the nights). Saving the rows one by one used to cost one INSERT per night per room.
+     * Plain INSERT on purpose: the unique (hotel, room, date) constraint makes a double activation fail loudly instead of
+     * silently doing nothing. The date is built as {@code date + integer}, so no time zone can shift a night.
+     *
+     * @return the number of rows created; the caller checks it equals lastDayOffset + 1
+     */
+    @Modifying
+    @Query(value = """
+            INSERT INTO inventory (hotel_id, room_id, date, booked_count, reserved_count, total_count, surge_factor,
+                                   price, city, closed, created_at, updated_at)
+            SELECT :hotelId, :roomId, CAST(:firstNight AS date) + series.day, 0, 0, :totalCount, 1.00,
+                   :price, :city, false, :now, :now
+            FROM generate_series(0, :lastDayOffset) AS series(day)
+            """, nativeQuery = true)
+    int insertNights(@Param("hotelId") Long hotelId,
+                     @Param("roomId") Long roomId,
+                     @Param("firstNight") LocalDate firstNight,
+                     @Param("lastDayOffset") int lastDayOffset,
+                     @Param("totalCount") int totalCount,
+                     @Param("price") BigDecimal price,
+                     @Param("city") String city,
+                     @Param("now") LocalDateTime now);
 
     List<Inventory> findByRoomOrderByDate(Room room);
 

@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
@@ -49,22 +50,14 @@ public class InventoryServiceImpl implements InventoryService {
     @Transactional
     public void initializeRoomForAYear(Room room) {
         LocalDate today = LocalDate.now(clock);
-        LocalDate endDate = today.plusYears(1);
+        int lastDayOffset = (int) ChronoUnit.DAYS.between(today, today.plusYears(1)); // today and the next year, inclusive
 
-        for (; !today.isAfter(endDate); today = today.plusDays(1)) {
-            Inventory inventory = Inventory.builder()
-                    .hotel(room.getHotel())
-                    .room(room)
-                    .bookedCount(0)
-                    .reservedCount(0)
-                    .city(room.getHotel().getCity())
-                    .date(today)
-                    .price(room.getBasePrice())
-                    .surgeFactor(BigDecimal.ONE)
-                    .totalCount(room.getTotalCount())
-                    .closed(false)
-                    .build();
-            inventoryRepository.save(inventory);
+        // One statement creates every night (it used to be one INSERT per night per room type).
+        int created = inventoryRepository.insertNights(room.getHotel().getId(), room.getId(), today, lastDayOffset,
+                room.getTotalCount(), room.getBasePrice(), room.getHotel().getCity(), LocalDateTime.now(clock));
+        if (created != lastDayOffset + 1) {
+            throw new IllegalStateException("Created " + created + " inventory rows for room " + room.getId()
+                    + ", expected " + (lastDayOffset + 1));
         }
     }
 
