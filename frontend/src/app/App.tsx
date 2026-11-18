@@ -9,6 +9,7 @@ import { DesignPage } from '@/features/design/DesignPage';
 import { HotelPage } from '@/features/hotel/HotelPage';
 import { HomePage } from '@/features/search/HomePage';
 import { SearchResultsPage } from '@/features/search/SearchResultsPage';
+import { StayAssistant } from '@/features/search/StayAssistant';
 import { GuestOnly } from '@/shared/session/GuestOnly';
 import { RequireAuth } from '@/shared/session/RequireAuth';
 import { RequireManager } from '@/shared/session/RequireManager';
@@ -120,6 +121,7 @@ export function App() {
           .
         </p>
       </footer>
+      <StayAssistant />
     </div>
   );
 }
