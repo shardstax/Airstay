@@ -32,7 +32,7 @@ export function SearchForm({ defaultValues }: SearchFormProps) {
   const checkIn = useWatch({ control, name: 'startDate' });
 
   return (
-    <Card>
+    <Card className="rounded-2xl shadow-lg">
       <form
         noValidate
         aria-label="Search hotels"
@@ -49,7 +49,7 @@ export function SearchForm({ defaultValues }: SearchFormProps) {
           render={({ field }) => (
             <PlaceCombobox
               label="City"
-              placeholder="Where to?"
+              placeholder="e.g. Pune"
               name={field.name}
               value={field.value}
               onChange={(label) => {

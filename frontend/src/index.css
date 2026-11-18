@@ -1,27 +1,25 @@
 @import 'tailwindcss';
 @import '@fontsource-variable/inter';
 
-/* Design tokens. Stripe blue (#0570de, the default primary colour of Stripe Elements and Checkout) as the single accent; a deep navy for text and cool grey surfaces, in the spirit of
-   Stripe's documentation: lots of white space, quiet borders, no gradients or glow. */
 @theme {
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
-  --color-brand-50: #eff7ff;
-  --color-brand-100: #dbeeff;
-  --color-brand-200: #b9dcfd;
-  --color-brand-300: #86c2fb;
-  --color-brand-400: #4aa1f5;
-  --color-brand-500: #1a84ea;
-  --color-brand-600: #0570de;
-  --color-brand-700: #065bb4;
-  --color-brand-800: #0a4a90;
-  --color-brand-900: #0e3a6e;
+  --color-brand-50: #edf6f3;
+  --color-brand-100: #d6ece5;
+  --color-brand-200: #b1d9ce;
+  --color-brand-300: #89c4b5;
+  --color-brand-400: #5da998;
+  --color-brand-500: #3a8877;
+  --color-brand-600: #23685a;
+  --color-brand-700: #195345;
+  --color-brand-800: #174438;
+  --color-brand-900: #13392f;
 
-  --color-ink: #0a2540;
-  --color-ink-soft: #425466;
-  --color-ink-muted: #697386;
-  --color-line: #e3e8ee;
-  --color-canvas: #f6f9fc;
+  --color-ink: #182a25;
+  --color-ink-soft: #435750;
+  --color-ink-muted: #596761;
+  --color-line: #dee5df;
+  --color-canvas: #f8f7f3;
 
   --color-success: #0e7a4f;
   --color-success-bg: #e6f6ee;

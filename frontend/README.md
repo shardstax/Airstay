@@ -19,10 +19,14 @@ price factors or close nights. Reports and charts come with the monitoring work.
 
 - **The city is chosen from real places**, never typed. `shared/places/PlaceCombobox` is an accessible combobox (keyboard, `aria-*`,
   status messages) fed by `GET /places`, which asks a geocoding provider (Open-Meteo, data from GeoNames, credited in the footer) through
-  the backend. A search starts at two letters and waits for a pause in typing. The form's value only becomes non-empty by choosing a
+  the backend. Suggestions show Indian cities and towns with their state or union territory. A search starts at two letters and waits
+  for a pause in typing. The form's value only becomes non-empty by choosing a
   suggestion; for a hotel the form sends the place's **id**, and the server derives the city name from it.
 - **Amenities and room types are ticked or picked from lists** served by `GET /catalog` and checked again by the server.
-- Photos must be **https** links, phone numbers and emails are validated, and numbers have the backend's limits. Each rule lives in one
+- Managers can upload up to 10 photos per hotel or room type, including exteriors, interiors and amenities. Uploads accept JPEG and PNG
+  files up to 2 MB and 4096 pixels per side. Existing HTTPS photo links also work. Uploaded files are stored in PostgreSQL and served
+  from the same origin. Removing an image from a listing removes its reference.
+- Phone numbers and emails are validated, and numbers have the backend's limits. Each rule lives in one
   schema (`hotelSchema`, `roomSchema`, `inventorySchema`, ...) that mirrors the backend's validation, so the form refuses what the server
   would, and the server stays the authority.
 
@@ -41,18 +45,20 @@ bundle is about 107 KB gzipped (React, router, query, forms, the API client), ag
 
 ## Stack and why
 
-| Tool                                                              | Why                                                                         |
-| ----------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Vite + React 19 + TypeScript (strict, `noUncheckedIndexedAccess`) | fast builds, typed end to end                                               |
-| TanStack Query                                                    | server data: caching, retries, loading and error states                     |
-| `openapi-typescript` + `openapi-fetch`                            | request and response types **generated from the backend's OpenAPI spec**    |
-| Tailwind CSS v4, design tokens in `src/index.css`                 | Stripe blue (`#0570de`) as the single accent, deep-navy text, quiet borders |
-| Vitest + Testing Library                                          | unit and component tests                                                    |
-| ESLint (strict, type-aware) + Prettier                            | enforced standards, see below                                               |
-| Self-hosted Inter font                                            | no third-party requests, so the CSP can stay `default-src 'self'`           |
+| Tool                                                              | Why                                                                      |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Vite + React 19 + TypeScript (strict, `noUncheckedIndexedAccess`) | fast builds, typed end to end                                            |
+| TanStack Query                                                    | server data: caching, retries, loading and error states                  |
+| `openapi-typescript` + `openapi-fetch`                            | request and response types **generated from the backend's OpenAPI spec** |
+| Tailwind CSS v4, design tokens in `src/index.css`                 | Forest-green accents, warm backgrounds and quiet borders                 |
+| Vitest + Testing Library                                          | unit and component tests                                                 |
+| ESLint (strict, type-aware) + Prettier                            | enforced standards, see below                                            |
+| Self-hosted Inter font                                            | no third-party requests, so the CSP can stay `default-src 'self'`        |
 
 TypeScript is pinned to 5.x: `openapi-typescript` needs the TypeScript 5 compiler API, which TypeScript 7 no longer provides.
 ESLint is pinned to 9 because `eslint-plugin-jsx-a11y` does not support 10 yet. Revisit both when those catch up.
+
+The home page photograph is from [Pexels](https://www.pexels.com/photo/29624149/).
 
 ## Standards, enforced by tooling (not by good intentions)
 

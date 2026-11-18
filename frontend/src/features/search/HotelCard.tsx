@@ -21,16 +21,16 @@ export function HotelCard({ hotel, stay }: HotelCardProps) {
   const to = `/hotels/${String(hotel.id)}?${stayToParams(stay).toString()}`;
 
   return (
-    <Card className="relative flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
+    <Card className="relative flex flex-col gap-5 rounded-2xl p-4 transition-shadow hover:shadow-md sm:flex-row sm:items-center">
       {photo ? (
         <img
           src={photo}
           alt=""
           loading="lazy"
-          className="h-40 w-full shrink-0 rounded-lg object-cover sm:h-28 sm:w-40"
+          className="h-48 w-full shrink-0 rounded-xl object-cover sm:h-32 sm:w-48"
         />
       ) : (
-        <div aria-hidden className="h-40 w-full shrink-0 rounded-lg bg-brand-50 sm:h-28 sm:w-40" />
+        <div aria-hidden className="h-32 w-full shrink-0 rounded-xl bg-brand-50 sm:w-48" />
       )}
 
       <div className="min-w-0 flex-1">
