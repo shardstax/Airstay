@@ -53,7 +53,7 @@ public class WebSecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/hotels/**", "/places", "/catalog").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/hotels/**", "/places", "/catalog", "/photos/*").permitAll()
                         .requestMatchers("/admin/**").hasRole("HOTEL_MANAGER")
                         .anyRequest().authenticated() // deny by default
                 )

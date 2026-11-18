@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
 import { describeRequestError } from '@/shared/api/errors';
@@ -8,7 +8,9 @@ import { CheckboxGroup } from '@/shared/ui/CheckboxGroup';
 import { Input } from '@/shared/ui/Input';
 import { Select } from '@/shared/ui/Select';
 
+import { MAX_PHOTOS } from './hotelSchema';
 import { roomSchema, type RoomValues } from './roomSchema';
+import { UrlListField } from './UrlListField';
 import type { Catalog } from './useCatalog';
 import { type SavedRoom, useSaveRoom } from './useRooms';
 
@@ -24,6 +26,7 @@ interface RoomFormProps {
 /** Add or change a room type. The type and amenities are chosen from fixed lists; the numbers have sensible limits. */
 export function RoomForm({ hotelId, catalog, initial, onSaved, onCancel }: RoomFormProps) {
   const save = useSaveRoom(hotelId, initial?.id);
+  const [uploading, setUploading] = useState(false);
   const schema = useMemo(() => roomSchema(catalog.roomTypes, catalog.roomAmenities), [catalog]);
   const {
     register,
@@ -38,6 +41,7 @@ export function RoomForm({ hotelId, catalog, initial, onSaved, onCancel }: RoomF
       totalCount: initial?.totalCount,
       capacity: initial?.capacity,
       amenities: initial?.amenities ?? [],
+      photos: initial?.photos ?? [],
     },
   });
 
@@ -47,6 +51,10 @@ export function RoomForm({ hotelId, catalog, initial, onSaved, onCancel }: RoomF
       aria-label={initial ? `Edit ${initial.type}` : 'Add a room type'}
       className="grid gap-4 sm:grid-cols-2"
       onSubmit={(event) => {
+        if (uploading) {
+          event.preventDefault();
+          return;
+        }
         void handleSubmit((values) => {
           save.mutate(values, { onSuccess: onSaved });
         })(event);
@@ -101,6 +109,23 @@ export function RoomForm({ hotelId, catalog, initial, onSaved, onCancel }: RoomF
         />
       </div>
 
+      <div className="sm:col-span-2">
+        <Controller
+          control={control}
+          name="photos"
+          render={({ field }) => (
+            <UrlListField
+              label="Room photos"
+              value={field.value ?? []}
+              onChange={field.onChange}
+              onUploadState={setUploading}
+              max={MAX_PHOTOS}
+              error={errors.photos?.message}
+            />
+          )}
+        />
+      </div>
+
       {save.isError ? (
         <p role="alert" className="text-sm text-danger sm:col-span-2">
           {describeRequestError(save.error)}
@@ -108,7 +133,7 @@ export function RoomForm({ hotelId, catalog, initial, onSaved, onCancel }: RoomF
       ) : null}
 
       <div className="flex gap-3 sm:col-span-2">
-        <Button type="submit" loading={save.isPending}>
+        <Button type="submit" loading={save.isPending} disabled={uploading}>
           {initial ? 'Save changes' : 'Add room type'}
         </Button>
         <Button variant="ghost" onClick={onCancel}>

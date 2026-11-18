@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { isHttpsUrl } from '@/shared/lib/url';
+import { isPhotoUrl } from '@/shared/lib/url';
 
 export const MAX_PHOTOS = 10;
 export const MAX_HOTEL_AMENITIES = 15;
@@ -29,7 +29,7 @@ export function hotelSchema(amenityChoices: readonly string[]) {
         'Choose from the list.',
       ),
     photos: z
-      .array(z.string().refine(isHttpsUrl, 'Photos must be https addresses.'))
+      .array(z.string().refine(isPhotoUrl, 'Upload a photo or enter an HTTPS address.'))
       .max(MAX_PHOTOS, `Add at most ${String(MAX_PHOTOS)} photos.`),
     address: z.string().trim().max(255, 'Use at most 255 characters.'),
     phoneNumber: z.union([

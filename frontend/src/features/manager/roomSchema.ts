@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+import { isPhotoUrl } from '@/shared/lib/url';
+
+import { MAX_PHOTOS } from './hotelSchema';
+
 export const MAX_ROOM_AMENITIES = 15;
 
 /** True when a price has at most two decimal places (whole paise), allowing for floating-point noise. */
@@ -26,6 +30,10 @@ export function roomSchema(typeChoices: readonly string[], amenityChoices: reado
       .int('Use a whole number.')
       .min(1, 'At least 1 guest.')
       .max(20, 'At most 20 guests per room.'),
+    photos: z
+      .array(z.string().refine(isPhotoUrl, 'Upload a photo or enter an HTTPS address.'))
+      .max(MAX_PHOTOS)
+      .optional(),
     amenities: z
       .array(z.string())
       .max(MAX_ROOM_AMENITIES, `Choose at most ${String(MAX_ROOM_AMENITIES)} amenities.`)

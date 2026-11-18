@@ -94,7 +94,7 @@ function HotelDetails({ hotelId, stay }: { hotelId: number; stay: Stay }) {
   }
 
   const { hotel, rooms } = info.data;
-  const photo = hotel.photos?.[0];
+  const photos = hotel.photos ?? [];
   const amenities = hotel.amenities ?? [];
   const address = hotel.contactInfo?.address;
   // The server always sends the city (the place label), but its type is optional as the field is read-only in requests.
@@ -106,8 +106,18 @@ function HotelDetails({ hotelId, stay }: { hotelId: number; stay: Stay }) {
         <Link to={backToResults} className="text-sm text-brand-700 underline underline-offset-4">
           Back to results
         </Link>
-        {photo ? (
-          <img src={photo} alt={hotel.name} className="mt-4 h-64 w-full rounded-card object-cover sm:h-80" />
+        {photos.length ? (
+          <div className="mt-4 flex snap-x gap-3 overflow-x-auto rounded-2xl">
+            {photos.map((photo, index) => (
+              <img
+                key={`${photo}-${String(index)}`}
+                src={photo}
+                alt={`${hotel.name}, ${String(index + 1)} of ${String(photos.length)}`}
+                loading={index === 0 ? 'eager' : 'lazy'}
+                className={`h-64 shrink-0 snap-start rounded-2xl object-cover sm:h-80 ${photos.length > 1 ? 'w-4/5' : 'w-full'}`}
+              />
+            ))}
+          </div>
         ) : null}
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-ink">{hotel.name}</h1>
         <p className="mt-1 text-ink-soft">{address ? `${address}, ${hotel.city}` : hotel.city}</p>

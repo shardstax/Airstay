@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
 import { describeRequestError } from '@/shared/api/errors';
@@ -34,6 +34,7 @@ interface HotelFormProps {
  */
 export function HotelForm({ catalog, initial, onSaved, onCancel }: HotelFormProps) {
   const save = useSaveHotel(initial?.id);
+  const [uploading, setUploading] = useState(false);
   const schema = useMemo(() => hotelSchema(catalog.hotelAmenities), [catalog.hotelAmenities]);
   const {
     register,
@@ -61,6 +62,10 @@ export function HotelForm({ catalog, initial, onSaved, onCancel }: HotelFormProp
       aria-label={initial ? 'Edit hotel' : 'Add a hotel'}
       className="flex flex-col gap-6"
       onSubmit={(event) => {
+        if (uploading) {
+          event.preventDefault();
+          return;
+        }
         void handleSubmit((values) => {
           save.mutate(toHotelRequest(values), { onSuccess: onSaved });
         })(event);
@@ -117,6 +122,7 @@ export function HotelForm({ catalog, initial, onSaved, onCancel }: HotelFormProp
               value={field.value}
               onChange={field.onChange}
               max={MAX_PHOTOS}
+              onUploadState={setUploading}
               error={errors.photos?.message}
             />
           )}
@@ -157,7 +163,7 @@ export function HotelForm({ catalog, initial, onSaved, onCancel }: HotelFormProp
       ) : null}
 
       <div className="flex gap-3">
-        <Button type="submit" loading={save.isPending}>
+        <Button type="submit" loading={save.isPending} disabled={uploading}>
           {initial ? 'Save changes' : 'Create hotel'}
         </Button>
         <Button variant="ghost" onClick={onCancel}>

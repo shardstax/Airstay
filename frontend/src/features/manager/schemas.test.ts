@@ -61,7 +61,7 @@ describe('hotelSchema', () => {
     'refuses the photo %s',
     (photo) => {
       expect(messagesOf(schema.safeParse({ ...valid, photos: [photo] }))).toEqual([
-        'photos.0: Photos must be https addresses.',
+        'photos.0: Upload a photo or enter an HTTPS address.',
       ]);
     },
   );

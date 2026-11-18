@@ -198,6 +198,7 @@ describe('room types', () => {
       totalCount: 8,
       capacity: 3,
       amenities: ['TV'],
+      photos: [],
     });
   });
 

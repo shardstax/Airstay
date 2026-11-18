@@ -13,9 +13,7 @@ import java.lang.annotation.Target;
 import java.net.URI;
 
 /**
- * Every entry must be an https address (a photo link) of at most 2048 characters, and there may be at most {@link #max()}
- * of them. http, other schemes (javascript:, data:, file:) and text that is not an address are refused, so a stored value
- * can never turn into a script or a downgraded request when a page shows it.
+ * Accepts at most {@link #max()} HTTPS links or exact same-origin catalog photo paths.
  */
 @Documented
 @Constraint(validatedBy = HttpsUrls.Validator.class)
@@ -25,7 +23,7 @@ public @interface HttpsUrls {
 
     int max() default 10;
 
-    String message() default "must be at most 10 https addresses";
+    String message() default "must contain at most 10 HTTPS links or uploaded photo paths";
 
     Class<?>[] groups() default {};
 
@@ -50,7 +48,7 @@ public @interface HttpsUrls {
                 return false;
             }
             for (String value : values) {
-                if (!isHttpsUrl(value)) {
+                if (!isHttpsUrl(value) && !PhotoController.isPhotoPath(value)) {
                     return false;
                 }
             }
