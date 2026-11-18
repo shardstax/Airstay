@@ -1,6 +1,7 @@
 import { defaultStay } from '@/shared/lib/stay';
 
 import { SearchForm } from './SearchForm';
+import { AiSearchBox } from './AiSearchBox';
 
 export function HomePage() {
   return (
@@ -24,6 +25,7 @@ export function HomePage() {
       </section>
       <div className="relative z-10 mx-3 -mt-9 sm:mx-8">
         <SearchForm defaultValues={{ city: '', ...defaultStay() }} />
+        <AiSearchBox />
       </div>
     </div>
   );
