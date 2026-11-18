@@ -12,10 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Authenticated while the assistant is introduced: this prevents an unauthenticated endpoint from spending model
- * budget. A later guest-facing release must add an explicit IP quota before opening it publicly.
- */
+/** Public, rate-limited interpretation of bounded hotel search conversations. */
 @RestController
 @RequestMapping("/ai/hotel-search")
 @RequiredArgsConstructor
@@ -31,6 +28,6 @@ public class AiHotelSearchController {
     public ResponseEntity<AiHotelSearchInterpretation> interpret(@Valid @RequestBody AiHotelSearchRequest request,
                                                                    HttpServletRequest httpRequest) {
         rateLimiter.check("ai-search-ip", httpRequest.getRemoteAddr(), rateLimits.getAiSearchPerIp());
-        return ResponseEntity.ok(sanitizer.sanitize(extractor.extract(request.message())));
+        return ResponseEntity.ok(sanitizer.sanitize(extractor.extract(request)));
     }
 }

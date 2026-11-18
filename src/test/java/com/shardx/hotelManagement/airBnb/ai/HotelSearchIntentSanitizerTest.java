@@ -1,5 +1,6 @@
 package com.shardx.hotelManagement.airBnb.ai;
 
+import com.shardx.hotelManagement.airBnb.repository.HotelRepository;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -8,21 +9,26 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.LocalDate;
 import java.util.Set;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class HotelSearchIntentSanitizerTest {
 
+    private final HotelRepository hotels = mock(HotelRepository.class);
     private final HotelSearchIntentSanitizer sanitizer = new HotelSearchIntentSanitizer(
-            Clock.fixed(Instant.parse("2026-11-18T00:00:00Z"), ZoneOffset.UTC));
+            Clock.fixed(Instant.parse("2026-11-18T00:00:00Z"), ZoneOffset.UTC), hotels, 30);
 
     @Test
     void canonicalizesCommonCityNamesWithoutTreatingTheModelAsTruth() {
+        when(hotels.findActiveCityLabels("mumbai")).thenReturn(List.of("Mumbai, Maharashtra, India"));
         AiHotelSearchInterpretation result = sanitizer.sanitize(new AiHotelSearchIntent(
                 "  Bombay ", LocalDate.of(2026, 11, 19), LocalDate.of(2026, 11, 21), 2, 2,
                 Set.of(Amenity.BREAKFAST, Amenity.SPA), new BigDecimal("12000"), BudgetScope.TOTAL_STAY));
 
-        assertThat(result.intent().city()).isEqualTo("Mumbai");
+        assertThat(result.intent().city()).isEqualTo("Mumbai, Maharashtra, India");
         assertThat(result.missingFields()).isEmpty();
         assertThat(result.unsupportedFilters()).containsExactlyInAnyOrder("guestsPerRoom", "amenities", "budgetInr");
         assertThat(result.readyForBasicSearch()).isTrue();

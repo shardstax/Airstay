@@ -1,5 +1,7 @@
 package com.shardx.hotelManagement.airBnb.ai;
 
+import com.shardx.hotelManagement.airBnb.repository.HotelRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -29,9 +31,14 @@ public class HotelSearchIntentSanitizer {
     );
 
     private final Clock clock;
+    private final HotelRepository hotels;
+    private final long maxNights;
 
-    public HotelSearchIntentSanitizer(Clock clock) {
+    public HotelSearchIntentSanitizer(Clock clock, HotelRepository hotels,
+                                     @Value("${airstay.booking.max-nights}") long maxNights) {
         this.clock = clock;
+        this.hotels = hotels;
+        this.maxNights = maxNights;
     }
 
     public AiHotelSearchInterpretation sanitize(AiHotelSearchIntent raw) {
@@ -64,7 +71,10 @@ public class HotelSearchIntentSanitizer {
     private String canonicalCity(String rawCity) {
         if (rawCity == null || rawCity.isBlank() || rawCity.length() > 100) return null;
         String normalized = rawCity.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
-        return CITY_ALIASES.getOrDefault(normalized, rawCity.trim());
+        String name = CITY_ALIASES.getOrDefault(normalized, rawCity.trim());
+        List<String> labels = hotels.findActiveCityLabels(name.toLowerCase(Locale.ROOT));
+        if (labels.size() == 1) return labels.getFirst();
+        return labels.isEmpty() ? name : null;
     }
 
     private LocalDate usableCheckIn(LocalDate date) {
@@ -72,7 +82,8 @@ public class HotelSearchIntentSanitizer {
     }
 
     private LocalDate usableCheckOut(LocalDate checkIn, LocalDate date) {
-        return checkIn != null && date != null && date.isAfter(checkIn) ? date : null;
+        return checkIn != null && date != null && date.isAfter(checkIn) && !date.isAfter(checkIn.plusDays(maxNights))
+                ? date : null;
     }
 
     private boolean inRange(Integer value, int min, int max) {
