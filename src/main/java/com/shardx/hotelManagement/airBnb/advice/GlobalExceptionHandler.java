@@ -6,6 +6,7 @@ import com.shardx.hotelManagement.airBnb.exception.PaymentProviderException;
 import com.shardx.hotelManagement.airBnb.exception.RateLimitExceededException;
 import com.shardx.hotelManagement.airBnb.exception.ResourceNotFoundException;
 import com.shardx.hotelManagement.airBnb.exception.UnAuthorisedException;
+import com.shardx.hotelManagement.airBnb.ai.AiSearchUnavailableException;
 import com.shardx.hotelManagement.airBnb.places.PlaceLookupException;
 import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
@@ -73,6 +74,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<?>> handlePaymentProvider(PaymentProviderException exception) {
         log.error("Payment provider error: {}", exception.getMessage(), exception.getCause());
         return build(HttpStatus.BAD_GATEWAY, exception.getMessage());
+    }
+
+    @ExceptionHandler(AiSearchUnavailableException.class)
+    public ResponseEntity<ApiResponse<?>> handleAiSearchUnavailable(AiSearchUnavailableException exception) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage());
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
