@@ -2,6 +2,7 @@ package com.shardx.hotelManagement.airBnb.places;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.http.client.ClientHttpRequestFactorySettings;
@@ -10,8 +11,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Real places from Open-Meteo's free geocoding API (https://open-meteo.com/en/docs/geocoding-api): no API key, data from
@@ -26,9 +31,19 @@ import java.util.Optional;
 public class OpenMeteoPlaceProvider implements PlaceProvider {
 
     private static final String POPULATED_PLACE_PREFIX = "PPL";
+    private static final Map<String, String> CITY_ALIASES = Map.of(
+            "allahabad", "Prayagraj",
+            "bangalore", "Bengaluru",
+            "bombay", "Mumbai",
+            "calcutta", "Kolkata",
+            "gurgaon", "Gurugram",
+            "madras", "Chennai",
+            "panaji", "Panjim",
+            "trivandrum", "Thiruvananthapuram");
 
     private final RestClient client;
 
+    @Autowired
     public OpenMeteoPlaceProvider(PlaceProperties properties) {
         // Short timeouts: a slow provider must make the search box fail fast, not hang the page.
         this(RestClient.builder().requestFactory(ClientHttpRequestFactoryBuilder.detect().build(
@@ -47,10 +62,11 @@ public class OpenMeteoPlaceProvider implements PlaceProvider {
         try {
             SearchResponse response = client.get()
                     .uri(uri -> uri.path("/v1/search")
-                            .queryParam("name", query)
+                            .queryParam("name", resolveAlias(query))
                             // Ask for more than needed: non-city results are dropped below.
                             .queryParam("count", Math.min(100, limit * 3))
                             .queryParam("language", "en")
+                            .queryParam("countryCode", "IN")
                             .queryParam("format", "json")
                             .build())
                     .retrieve()
@@ -58,14 +74,28 @@ public class OpenMeteoPlaceProvider implements PlaceProvider {
             if (response == null || response.results() == null) {
                 return List.of();
             }
+            Set<String> labels = new HashSet<>();
             return response.results().stream()
                     .filter(OpenMeteoPlaceProvider::isUsablePopulatedPlace)
+                    .filter(result -> "IN".equals(result.countryCode()) && result.admin1() != null
+                            && !result.admin1().isBlank())
                     .map(OpenMeteoPlaceProvider::toPlace)
+                    .filter(place -> labels.add(place.getLabel()))
                     .limit(limit)
                     .toList();
         } catch (RestClientException e) {
             throw new PlaceLookupException("Place search is temporarily unavailable", e);
         }
+    }
+
+    private static String resolveAlias(String query) {
+        int qualifier = query.indexOf(',');
+        String name = qualifier < 0 ? query : query.substring(0, qualifier).stripTrailing();
+        String canonical = CITY_ALIASES.get(name.toLowerCase(Locale.ROOT));
+        if (canonical == null) {
+            return query;
+        }
+        return qualifier < 0 ? canonical : canonical + query.substring(qualifier);
     }
 
     @Override

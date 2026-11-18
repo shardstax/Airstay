@@ -30,6 +30,8 @@ class OpenMeteoPlaceProviderTest {
                "country":"India"},
               {"id":1880348,"name":"Punggol","latitude":1.41444,"longitude":103.90694,"feature_code":"PPL","country_code":"SG",
                "country":"Singapore"},
+              {"id":987,"name":"Pune","latitude":18.3,"longitude":73.6,"feature_code":"PPL","country_code":"IN",
+               "admin1":"Maharashtra","country":"India"},
               {"id":999,"name":"No coordinates","feature_code":"PPL","country_code":"IN","country":"India"}
             ],"generationtime_ms":0.2}
             """;
@@ -50,16 +52,27 @@ class OpenMeteoPlaceProviderTest {
                 .andExpect(method(org.springframework.http.HttpMethod.GET))
                 .andExpect(queryParam("name", "pun"))
                 .andExpect(queryParam("language", "en"))
+                .andExpect(queryParam("countryCode", "IN"))
                 .andRespond(withSuccess(SEARCH_PUN, MediaType.APPLICATION_JSON));
 
         List<PlaceDto> places = provider.search("pun", 8);
 
         assertThat(places).extracting(PlaceDto::getLabel).containsExactly(
-                "Pune, Maharashtra, India", "Punāsa, Madhya Pradesh, India", "Punggol, Singapore");
+                "Pune, Maharashtra, India", "Punāsa, Madhya Pradesh, India");
         PlaceDto pune = places.get(0);
         assertThat(pune.getId()).isEqualTo(1259229L);
         assertThat(pune.getLatitude()).isEqualTo(18.51957);
         assertThat(pune.getCountryCode()).isEqualTo("IN");
+        server.verify();
+    }
+
+    @Test
+    void supportsAnOlderCityNameWithAStateQualifier() {
+        server.expect(request -> assertThat(request.getURI().getQuery()).contains("name=Bengaluru, Karnataka"))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        provider.search("Bangalore, Karnataka", 8);
+
         server.verify();
     }
 

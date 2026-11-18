@@ -52,11 +52,11 @@ export function PlaceCombobox({
     onChange(place.label, place);
   };
 
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       setOpen(true);
-      setActive((index) => Math.min(index + 1, places.length - 1));
+      setActive((index) => Math.max(0, Math.min(index + 1, places.length - 1)));
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       setActive((index) => Math.max(index - 1, 0));
@@ -109,7 +109,7 @@ export function PlaceCombobox({
               setOpen(true);
             }}
             onBlur={() => {
-              // Clicking an option fires mousedown (handled below) before this, so the list is still there to click.
+              // The options prevent pointer focus so the input stays focused until a choice is made.
               setOpen(false);
               onBlur?.();
             }}
@@ -119,7 +119,7 @@ export function PlaceCombobox({
       </Field>
 
       {showList ? (
-        <div className="absolute z-20 mt-1 w-full rounded-lg border border-line bg-white shadow-card">
+        <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-line bg-white shadow-lg">
           {places.length > 0 ? (
             <ul
               id={listId}
@@ -132,20 +132,32 @@ export function PlaceCombobox({
                   key={place.id}
                   id={`${listId}-${String(index)}`}
                   role="option"
+                  aria-label={place.label}
+                  ref={(option) => {
+                    if (index === active && option && 'scrollIntoView' in option) {
+                      option.scrollIntoView({ block: 'nearest' });
+                    }
+                  }}
                   aria-selected={index === active}
                   className={cn(
-                    'cursor-pointer px-3 py-2 text-sm text-ink',
+                    'cursor-pointer px-4 py-2.5 text-sm text-ink',
                     index === active ? 'bg-brand-50' : 'hover:bg-canvas',
                   )}
-                  onMouseDown={(event) => {
+                  onPointerDown={(event) => {
                     event.preventDefault();
+                  }}
+                  onClick={() => {
                     choose(place);
                   }}
+                  onKeyDown={onKeyDown}
                   onMouseEnter={() => {
                     setActive(index);
                   }}
                 >
-                  {place.label}
+                  <span className="block font-medium">{place.name}</span>
+                  <span className="block text-xs text-ink-muted">
+                    {[place.region, place.country].filter(Boolean).join(', ')}
+                  </span>
                 </li>
               ))}
             </ul>

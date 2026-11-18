@@ -32,7 +32,7 @@ export function usePlaceSuggestions(text: string) {
   });
 
   return {
-    places: enabled ? (result.data ?? []) : [],
+    places: enabled && query === text.trim() ? (result.data ?? []) : [],
     // Typing again right after a pause counts as searching too, so the list never claims "no results" too early.
     isSearching: text.trim() !== query || (enabled && result.isFetching),
     isError: enabled && result.isError,
