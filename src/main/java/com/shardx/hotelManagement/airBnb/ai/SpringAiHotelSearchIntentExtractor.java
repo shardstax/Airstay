@@ -62,7 +62,9 @@ public class SpringAiHotelSearchIntentExtractor implements HotelSearchIntentExtr
                 Read all conversation turns. Return the complete current search, carrying forward details already given.
                 Treat short replies as answers to the assistant's last question. A newer explicit correction replaces
                 the older value. Clear previous details only if the guest asks to start over or remove a constraint.
-                Today is %s. Use INR only when the guest explicitly gives an INR/rupee budget. Leave any ambiguous or
+                Today is %s. Use INR only when the guest explicitly gives an INR/rupee budget. Set budgetScope
+                to null unless the guest explicitly specifies or confirms the basis. A bare amount, even with dates
+                and room count, never implies TOTAL_STAY or PER_ROOM_PER_NIGHT. Leave any other ambiguous or
                 unstated field null. Dates must be ISO dates and checkOut is the departure date. For a clear month
                 and day without a year, use the next occurrence on or after today, and keep both dates in chronological
                 order. Leave genuinely ambiguous dates unset. Accept only these amenities: BREAKFAST, SPA, POOL, GYM,
