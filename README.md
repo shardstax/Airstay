@@ -187,6 +187,33 @@ docker compose up --build -d --wait   # PostgreSQL 16, Redis 7, Kafka 3.9, Mailp
 docker compose down                   # stop (add --volumes to also delete the database and Kafka data)
 ```
 
+### Seed the local demo catalog
+
+The application starts with an empty catalog. To add 21 fictional hotels and 42 room types in Pune, Hyderabad,
+Bengaluru, Delhi, Mumbai, Nagpur, and Jaipur for local demos, run the idempotent seed script after Compose is healthy:
+
+```powershell
+Get-Content scripts/seed-demo-catalog.sql | docker compose exec -T postgres psql -U airstay -d airstay
+```
+
+It is deliberately a manual script rather than a Flyway migration, so demo data never appears automatically in a
+production database. Search using the normal city picker and any date within the next year.
+
+To add photos to a seeded hotel, sign in locally as `demo-catalog-owner@airstay.invalid` with password
+`AirStayDemo!2026`, open **Manage hotels**, and upload a JPEG or PNG in the hotel or room form. Files are validated
+(2 MB maximum and 4096 pixels per side) and stored in the local PostgreSQL `catalog_photo` table. These credentials
+exist only for local demonstration data; never run the seed script in production.
+
+To attach the included varied, original demo photos to every seeded property automatically, run:
+
+```powershell
+.\scripts\import-demo-photos.ps1
+```
+
+The importer is idempotent and uses the same database-backed photo URLs as a normal manager upload. The library has
+city-specific property images for all seven cities plus king, twin, and family room variants; every compact JPEG in
+`scripts/demo-assets/` is below the application's 2 MB upload limit.
+
 - API: `http://localhost:8080/api/v1` · Swagger UI: `http://localhost:8080/api/v1/swagger-ui.html`
 - Health: `http://localhost:8080/api/v1/actuator/health`
 - E-mails sent by the notification service land in the Mailpit inbox: `http://localhost:8025` (nothing leaves your machine).
