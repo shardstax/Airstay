@@ -11,6 +11,7 @@ export function searchSchema(now = new Date()) {
       // The label of a place chosen from the picker ("Pune, Maharashtra, India"), never free text.
       city: z.string().trim().min(1, 'Choose a place from the list.').max(255, 'Use at most 255 characters.'),
       ...stayShape(now),
+      amenities: z.array(z.string().trim().min(1)).max(15).optional(),
     })
     .superRefine(checkStayDates);
 }
@@ -24,11 +25,13 @@ export interface SearchQuery extends SearchValues {
 
 export function toSearchParams({
   city,
+  amenities,
   page = 1,
   ...stay
 }: SearchValues & { page?: number }): URLSearchParams {
   const params = stayToParams(stay);
   params.set('city', city.trim());
+  for (const amenity of [...new Set(amenities)].sort()) params.append('amenities', amenity);
   if (page > 1) {
     params.set('page', String(page));
   }
@@ -43,5 +46,12 @@ export function parseSearchParams(params: URLSearchParams, now = new Date()): Se
     return null;
   }
   const page = Number(params.get('page') ?? 1);
-  return { city, ...stay, page: Number.isInteger(page) && page >= 1 ? page : 1 };
+  const amenities = [...new Set(params.getAll('amenities'))].sort();
+  if (amenities.length > 15 || amenities.some((amenity) => !amenity.trim())) return null;
+  return {
+    city,
+    ...stay,
+    ...(amenities.length ? { amenities } : {}),
+    page: Number.isInteger(page) && page >= 1 ? page : 1,
+  };
 }

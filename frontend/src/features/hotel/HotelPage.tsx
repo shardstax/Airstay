@@ -98,7 +98,12 @@ function HotelDetails({ hotelId, stay }: { hotelId: number; stay: Stay }) {
   const amenities = hotel.amenities ?? [];
   const address = hotel.contactInfo?.address;
   // The server always sends the city (the place label), but its type is optional as the field is read-only in requests.
-  const backToResults = `/search?${new URLSearchParams({ ...(hotel.city ? { city: hotel.city } : {}), ...Object.fromEntries(stayToParams(stay)) }).toString()}`;
+  const resultParams = stayToParams(stay);
+  if (hotel.city) resultParams.set('city', hotel.city);
+  for (const amenity of new URLSearchParams(location.search).getAll('amenities')) {
+    resultParams.append('amenities', amenity);
+  }
+  const backToResults = `/search?${resultParams.toString()}`;
 
   return (
     <article className="flex flex-col gap-8">

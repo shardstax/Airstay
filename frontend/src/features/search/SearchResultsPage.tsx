@@ -65,8 +65,16 @@ function Results({ query }: { query: SearchQuery }) {
         </EmptyState>
       ) : search.data.hotels.length === 0 ? (
         <EmptyState
-          title="No hotels available for these dates"
-          description="Try different dates, fewer rooms or another city."
+          title={
+            query.amenities?.length
+              ? 'No hotels match these amenities'
+              : 'No hotels available for these dates'
+          }
+          description={
+            query.amenities?.length
+              ? 'Try removing an amenity, changing your dates or selecting fewer rooms.'
+              : 'Try different dates, fewer rooms or another city.'
+          }
         />
       ) : (
         <section

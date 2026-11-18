@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { describeRequestError } from '@/shared/api/errors';
+import type { Catalog } from '@/shared/api/useCatalog';
 import { formatPrice, pluralize } from '@/shared/lib/format';
 import { Badge } from '@/shared/ui/Badge';
 import { Button } from '@/shared/ui/Button';
@@ -10,7 +11,6 @@ import { LinkButton } from '@/shared/ui/LinkButton';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import { RoomForm } from './RoomForm';
-import type { Catalog } from './useCatalog';
 import { type SavedRoom, useDeleteRoom, useRooms } from './useRooms';
 
 interface RoomsSectionProps {

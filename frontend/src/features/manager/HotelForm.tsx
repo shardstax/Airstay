@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
 import { describeRequestError } from '@/shared/api/errors';
+import type { Catalog } from '@/shared/api/useCatalog';
 import { PlaceCombobox } from '@/shared/places/PlaceCombobox';
 import { Button } from '@/shared/ui/Button';
 import { Card } from '@/shared/ui/Card';
@@ -17,7 +18,6 @@ import {
   toHotelRequest,
 } from './hotelSchema';
 import { UrlListField } from './UrlListField';
-import type { Catalog } from './useCatalog';
 import { type ManagedHotel, useSaveHotel } from './useHotels';
 
 interface HotelFormProps {

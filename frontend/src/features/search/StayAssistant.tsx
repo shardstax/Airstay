@@ -32,6 +32,11 @@ interface Turn {
 const storageKey = 'airstay:stay-assistant:v1';
 const popoverId = 'stay-assistant';
 const maxTurns = 12;
+
+function amenityLabel(token: string): string {
+  if (token === 'WIFI') return 'WiFi';
+  return token.charAt(0) + token.slice(1).toLowerCase().replaceAll('_', ' ');
+}
 const introductions = ['Help me find a hotel in Pune', 'Find a stay in Mumbai this weekend'];
 
 function readHistory(): Turn[] {
@@ -51,7 +56,7 @@ function assistantReply({ intent, missingFields }: Interpretation) {
     checkOut && `check-out ${formatDate(checkOut)}`,
     rooms && pluralize(rooms, 'room'),
     guestsPerRoom && `${pluralize(guestsPerRoom, 'guest')} per room`,
-    amenities.map((amenity) => amenity.toLowerCase()).join(', '),
+    amenities.map(amenityLabel).join(', '),
     budgetInr &&
       `₹${budgetInr.toLocaleString('en-IN')}${
         budgetScope === 'TOTAL_STAY' ? ' for the whole stay' : budgetScope ? ' per room per night' : ''
@@ -88,6 +93,7 @@ export function StayAssistant() {
     startDate: intent?.checkIn,
     endDate: intent?.checkOut,
     rooms: intent?.rooms,
+    amenities: intent?.amenities.map(amenityLabel),
   });
   const canSearch = search.success && last?.missingFields.length === 0;
   const isBrowsePage = pathname === '/' || pathname === '/search' || /^\/hotels\/[^/]+$/.test(pathname);
@@ -270,10 +276,14 @@ export function StayAssistant() {
             )}
           {!pending && !failure && canSearch && (
             <div className="space-y-2">
-              {last.unsupportedFilters.length > 0 && (
+              {last.unsupportedFilters.some((filter) => filter !== 'amenities') && (
                 <p className="text-ink-muted">
-                  Availability search uses city, dates and rooms. Check guest capacity, amenities and budget
-                  on each hotel’s listing.
+                  Check {last.unsupportedFilters.includes('guestsPerRoom') ? 'guest capacity' : ''}
+                  {last.unsupportedFilters.includes('guestsPerRoom') &&
+                  last.unsupportedFilters.includes('budgetInr')
+                    ? ' and '
+                    : ''}
+                  {last.unsupportedFilters.includes('budgetInr') ? 'budget' : ''} on each hotel’s listing.
                 </p>
               )}
               <Button
