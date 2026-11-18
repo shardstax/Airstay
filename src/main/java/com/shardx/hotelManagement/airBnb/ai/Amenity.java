@@ -1,11 +1,20 @@
 package com.shardx.hotelManagement.airBnb.ai;
 
-/** Deliberately small closed vocabulary; later catalog work can add only amenities that can actually be verified. */
+/** Hotel amenity tokens used in the assistant's structured output. */
 public enum Amenity {
+    AIR_CONDITIONING,
+    AIRPORT_SHUTTLE,
+    BAR,
+    BEACH_ACCESS,
     BREAKFAST,
-    SPA,
-    POOL,
+    BUSINESS_CENTRE,
     GYM,
+    LAUNDRY,
     PARKING,
+    PET_FRIENDLY,
+    POOL,
+    RESTAURANT,
+    ROOM_SERVICE,
+    SPA,
     WIFI
 }

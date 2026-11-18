@@ -1,6 +1,7 @@
 package com.shardx.hotelManagement.airBnb.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.shardx.hotelManagement.airBnb.catalog.Catalog;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
@@ -8,6 +9,7 @@ import lombok.Data;
 import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /** Bound from query parameters, e.g. GET /hotels/search?city=Pune&startDate=2026-12-20&endDate=2026-12-22 */
 @Data
@@ -40,6 +42,20 @@ public class HotelSearchRequest {
     @Min(1)
     @Max(50)
     private Integer size = 10;
+
+    @Parameter(description = "Required hotel amenities. A hotel must offer every selected amenity.")
+    @Size(max = 15)
+    private List<String> amenities = List.of();
+
+    public List<String> getAmenities() {
+        return amenities == null ? List.of() : amenities;
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "Choose hotel amenities from the catalog")
+    public boolean isAmenitiesValid() {
+        return getAmenities().stream().allMatch(value -> value != null && Catalog.HOTEL_AMENITIES.contains(value));
+    }
 
     // Empty or missing values fall back to the defaults instead of failing.
     public Integer getRoomsCount() {

@@ -62,7 +62,6 @@ public class HotelSearchIntentSanitizer {
 
         List<String> unsupported = new ArrayList<>();
         if (guestsPerRoom != null) unsupported.add("guestsPerRoom");
-        if (!amenities.isEmpty()) unsupported.add("amenities");
         if (budget != null) unsupported.add("budgetInr");
 
         return new AiHotelSearchInterpretation(intent, List.copyOf(missing), List.copyOf(unsupported), missing.isEmpty());

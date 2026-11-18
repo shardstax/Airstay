@@ -42,6 +42,7 @@ public class CachedHotelSearch {
                 + ":" + request.getEndDate()
                 + ":" + request.getRoomsCount()
                 + ":" + request.getPage()
-                + ":" + request.getSize();
+                + ":" + request.getSize()
+                + ":" + String.join(",", request.getAmenities().stream().distinct().sorted().toList());
     }
 }

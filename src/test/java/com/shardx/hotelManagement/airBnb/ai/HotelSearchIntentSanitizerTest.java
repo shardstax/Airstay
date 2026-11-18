@@ -30,7 +30,7 @@ class HotelSearchIntentSanitizerTest {
 
         assertThat(result.intent().city()).isEqualTo("Mumbai, Maharashtra, India");
         assertThat(result.missingFields()).isEmpty();
-        assertThat(result.unsupportedFilters()).containsExactlyInAnyOrder("guestsPerRoom", "amenities", "budgetInr");
+        assertThat(result.unsupportedFilters()).containsExactlyInAnyOrder("guestsPerRoom", "budgetInr");
         assertThat(result.readyForBasicSearch()).isTrue();
     }
 

@@ -645,7 +645,7 @@ export interface components {
             rooms?: number;
             /** Format: int32 */
             guestsPerRoom?: number;
-            amenities?: ("BREAKFAST" | "SPA" | "POOL" | "GYM" | "PARKING" | "WIFI")[];
+            amenities?: ("AIR_CONDITIONING" | "AIRPORT_SHUTTLE" | "BAR" | "BEACH_ACCESS" | "BREAKFAST" | "BUSINESS_CENTRE" | "GYM" | "LAUNDRY" | "PARKING" | "PET_FRIENDLY" | "POOL" | "RESTAURANT" | "ROOM_SERVICE" | "SPA" | "WIFI")[];
             budgetInr?: number;
             /** @enum {string} */
             budgetScope?: "TOTAL_STAY" | "PER_ROOM_PER_NIGHT";
@@ -1558,6 +1558,8 @@ export interface operations {
                 page?: string;
                 /** @description Page size (max 50) */
                 size?: string;
+                /** @description Required hotel amenities. A hotel must offer every selected amenity. */
+                amenities?: string[];
             };
             header?: never;
             path?: never;
