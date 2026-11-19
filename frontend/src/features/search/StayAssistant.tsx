@@ -1,6 +1,8 @@
+import { useQuery } from '@tanstack/react-query';
 import { type SubmitEvent, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
+import { api } from '@/shared/api/client';
 import { formatDate, pluralize } from '@/shared/lib/format';
 import { Button } from '@/shared/ui/Button';
 
@@ -97,6 +99,13 @@ export function StayAssistant() {
   });
   const canSearch = search.success && last?.missingFields.length === 0;
   const isBrowsePage = pathname === '/' || pathname === '/search' || /^\/hotels\/[^/]+$/.test(pathname);
+  const status = useQuery({
+    queryKey: ['ai-search-status'],
+    enabled: isBrowsePage,
+    queryFn: async () => (await api.GET('/ai/hotel-search/status')).data?.available ?? false,
+    staleTime: 15_000,
+    refetchInterval: 60_000,
+  });
 
   useEffect(() => {
     try {
@@ -146,7 +155,7 @@ export function StayAssistant() {
     void send(draft);
   }
 
-  if (!isBrowsePage) return null;
+  if (!isBrowsePage || status.data !== true) return null;
 
   return (
     <>
