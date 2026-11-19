@@ -1,4 +1,6 @@
-{$AIRSTAY_HOST} {
+{$AIRSTAY_HOST} {$AIRSTAY_LEGACY_HOST} {
+	@legacy not host {$AIRSTAY_HOST}
+	redir @legacy https://{$AIRSTAY_HOST}{uri} 308
 	encode zstd gzip
 	reverse_proxy frontend:80
 }

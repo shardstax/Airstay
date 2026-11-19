@@ -17,6 +17,7 @@ docker compose -f docker-compose.yml -f docker-compose.contabo.yml up -d --build
 
 With `DEMO_SEED_ON_STARTUP=true`, the API adds demo inventory and photos after Flyway runs on the fresh database. Restarts keep the same data.
 For a real catalog or an existing database that has never been seeded, set `DEMO_SEED_ON_STARTUP=false`.
+When changing hostnames, point both names at the VPS and set `AIRSTAY_LEGACY_HOST` to the previous name. Caddy redirects it to `AIRSTAY_HOST`.
 
 ## Verify the demo
 

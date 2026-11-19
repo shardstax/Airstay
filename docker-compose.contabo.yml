@@ -43,6 +43,7 @@ services:
         condition: service_healthy
     environment:
       AIRSTAY_HOST: ${AIRSTAY_HOST:?Set your public hostname}
+      AIRSTAY_LEGACY_HOST: ${AIRSTAY_LEGACY_HOST:-}
     ports:
       - "80:80"
       - "443:443"
