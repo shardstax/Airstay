@@ -16,7 +16,12 @@ public interface HotelRepository extends JpaRepository<Hotel, Long> {
 
     @Query(value = """
             SELECT DISTINCT city FROM hotel
-            WHERE active AND (lower(city) = :name OR lower(trim(split_part(city, ',', 1))) = :name)
+            WHERE active AND (
+                lower(city) = :name
+                OR starts_with(lower(city), concat(:name, ','))
+                OR (split_part(city, ',', 3) <> ''
+                    AND lower(concat(trim(split_part(city, ',', 1)), ', ', trim(split_part(city, ',', 3)))) = :name)
+            )
             ORDER BY city
             LIMIT 2
             """, nativeQuery = true)
