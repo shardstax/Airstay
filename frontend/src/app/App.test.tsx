@@ -41,6 +41,20 @@ describe('the app shell', () => {
 
     expect(await screen.findByRole('heading', { name: /page not found/i })).toBeInTheDocument();
   });
+
+  it('lets a site admin turn off the assistant', async () => {
+    rememberPreviousSession();
+    const backend = mockApi({
+      ...restorableSession,
+      'GET /users/profile': { data: { ...ada, roles: ['GUEST', 'ADMIN'] } },
+      'GET /admin/ai-search/settings': { data: { enabled: true, configured: true } },
+      'PUT /admin/ai-search/settings': { data: { enabled: false, configured: true } },
+    });
+    renderRoute(<App />, { route: '/admin/settings' });
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Turn off AI assistant' }));
+    expect(await screen.findByRole('button', { name: 'Turn on AI assistant' })).toBeInTheDocument();
+    expect(backend.count('PUT /admin/ai-search/settings')).toBe(1);
+  });
 });
 
 describe('a visitor who is not signed in', () => {
@@ -202,11 +216,10 @@ describe('signing up', () => {
     await fillSignup(user);
 
     expect(await screen.findByRole('link', { name: 'Ada Lovelace' })).toBeInTheDocument();
-    expect(backend.keys().filter((key) => key !== 'POST /auth/refresh')).toEqual([
-      'POST /auth/signup',
-      'POST /auth/login',
-      'GET /users/profile',
-    ]);
+    const authCalls = backend
+      .keys()
+      .filter((key) => key !== 'POST /auth/refresh' && key !== 'GET /ai/hotel-search/status');
+    expect(authCalls).toEqual(['POST /auth/signup', 'POST /auth/login', 'GET /users/profile']);
   });
 
   it('shows the server message when the email is already registered', async () => {
