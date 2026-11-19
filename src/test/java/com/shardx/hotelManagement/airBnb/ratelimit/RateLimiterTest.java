@@ -8,6 +8,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import java.time.Clock;
 import java.time.Duration;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.mock;
 
@@ -29,6 +30,17 @@ class RateLimiterTest {
                 limiter.check("login-email", "someone@example.com", rule);
             }
         }).doesNotThrowAnyException();
+    }
+
+    @Test
+    void requiredQuotaStopsPaidWorkWhenRedisCannotCountIt() {
+        properties.setEnabled(false);
+        StringRedisTemplate redis = mock(StringRedisTemplate.class, invocation -> {
+            throw new RedisConnectionFailureException("redis is down");
+        });
+        RateLimiter limiter = new RateLimiter(redis, new RedisGate(Clock.systemUTC()), properties);
+
+        assertThat(limiter.checkRequired("ai-search-global", "all", rule)).isFalse();
     }
 
     @Test

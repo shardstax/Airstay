@@ -32,6 +32,7 @@ public class RateLimitProperties {
     private Rule placesPerIp = new Rule(120, Duration.ofMinutes(1));
     /** AI calls have a direct cost, so public natural-language search is deliberately tight. */
     private Rule aiSearchPerIp = new Rule(12, Duration.ofMinutes(1));
+    private Rule aiSearchGlobal = new Rule(200, Duration.ofDays(1));
 
     /** At most {@code limit} requests per {@code window}. */
     @Data

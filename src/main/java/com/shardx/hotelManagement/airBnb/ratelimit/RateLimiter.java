@@ -57,9 +57,23 @@ public class RateLimiter {
         if (!properties.isEnabled()) {
             return;
         }
-        String key = KEY_PREFIX + name + ":" + (subject.length() > MAX_SUBJECT_LENGTH
+        checkDecision(gate.callOr("rate limit", () -> evaluate(key(name, subject), rule), Decision.ALLOWED));
+    }
+
+    /** Paid requests must be counted even when ordinary, fail-open limits are disabled. */
+    public boolean checkRequired(String name, String subject, RateLimitProperties.Rule rule) {
+        Decision decision = gate.callOr("required rate limit", () -> evaluate(key(name, subject), rule), null);
+        if (decision == null) return false;
+        checkDecision(decision);
+        return true;
+    }
+
+    private String key(String name, String subject) {
+        return KEY_PREFIX + name + ":" + (subject.length() > MAX_SUBJECT_LENGTH
                 ? subject.substring(0, MAX_SUBJECT_LENGTH) : subject);
-        Decision decision = gate.callOr("rate limit", () -> evaluate(key, rule), Decision.ALLOWED);
+    }
+
+    private void checkDecision(Decision decision) {
         if (!decision.allowed()) {
             throw new RateLimitExceededException(decision.retryAfterSeconds());
         }

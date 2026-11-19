@@ -13,4 +13,6 @@ public class AiSearchProperties {
     /** A false value means no model request can be made. This is the safe default. */
     private boolean enabled;
 
+    /** Block paid model requests if the shared limiter cannot count them. */
+    private boolean requireQuota;
 }

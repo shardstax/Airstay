@@ -25,6 +25,7 @@ public class AiHotelSearchController {
     private final RateLimiter rateLimiter;
     private final RateLimitProperties rateLimits;
     private final AiSearchSettings settings;
+    private final AiSearchProperties properties;
 
     @GetMapping("/status")
     public ResponseEntity<AiSearchStatus> getAiSearchStatus() {
@@ -38,7 +39,15 @@ public class AiHotelSearchController {
         if (!settings.isAvailable()) {
             throw new AiSearchUnavailableException("The AI hotel-search assistant is turned off or unavailable");
         }
-        rateLimiter.check("ai-search-ip", httpRequest.getRemoteAddr(), rateLimits.getAiSearchPerIp());
+        String address = httpRequest.getRemoteAddr();
+        if (properties.isRequireQuota()) {
+            if (!rateLimiter.checkRequired("ai-search-ip", address, rateLimits.getAiSearchPerIp())
+                    || !rateLimiter.checkRequired("ai-search-global", "all", rateLimits.getAiSearchGlobal())) {
+                throw new AiSearchUnavailableException("The AI assistant is paused until its usage limiter is available");
+            }
+        } else {
+            rateLimiter.check("ai-search-ip", address, rateLimits.getAiSearchPerIp());
+        }
         return ResponseEntity.ok(sanitizer.sanitize(extractor.extract(request)));
     }
 
