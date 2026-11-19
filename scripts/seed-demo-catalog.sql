@@ -5,15 +5,18 @@
 -- seeds 21 hotels, 42 room types, and availability from today through the next year.
 --
 -- Run against the local Compose database:
---   Get-Content scripts/seed-demo-catalog.sql | docker compose exec -T postgres psql -U airstay -d airstay
+--   Get-Content scripts/seed-demo-catalog.sql | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U airstay -d airstay
 
--- This local-only owner can manage the seeded hotels and upload photos through the UI.
--- Never run this script against production: the credentials below are intentionally public in the repository.
+-- A remote demo must supply an existing hotel manager's email via -v demo_owner_email=...
+-- Only the local Compose command may use the built-in demo account.
+\if :{?demo_owner_email}
+\else
+\set demo_owner_email demo-catalog-owner@airstay.invalid
 INSERT INTO app_user (email, password, name)
 VALUES ('demo-catalog-owner@airstay.invalid',
         '$2a$10$f6o2R6kw1AfMmDi1NXpv5OUM9dj3yLRidiWTo8/dGsOX5Tpfbx/Du',
         'AirStay Demo Catalog')
-ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password, name = EXCLUDED.name;
+ON CONFLICT (email) DO NOTHING;
 
 INSERT INTO app_user_roles (user_id, role)
 SELECT id, role
@@ -21,6 +24,14 @@ FROM app_user
 CROSS JOIN (VALUES ('GUEST'::VARCHAR), ('HOTEL_MANAGER'::VARCHAR)) AS required_roles(role)
 WHERE email = 'demo-catalog-owner@airstay.invalid'
 ON CONFLICT (user_id, role) DO NOTHING;
+\endif
+
+-- psql with ON_ERROR_STOP aborts if this lookup returns no rows.
+SELECT u.id AS demo_owner_id
+FROM app_user u
+JOIN app_user_roles r ON r.user_id = u.id
+WHERE u.email = :'demo_owner_email' AND r.role = 'HOTEL_MANAGER'
+\gset
 
 WITH demo_hotels (name, city, place_id, address, phone_number, email, location, amenities) AS (
     VALUES
@@ -50,8 +61,8 @@ INSERT INTO hotel (name, city, place_id, photos, amenities, address, phone_numbe
 SELECT d.name, d.city, d.place_id, ARRAY[]::TEXT[], d.amenities, d.address, d.phone_number, d.email, d.location,
        true, u.id, now(), now()
 FROM demo_hotels d
-CROSS JOIN (SELECT id FROM app_user WHERE email = 'demo-catalog-owner@airstay.invalid') u
-WHERE NOT EXISTS (SELECT 1 FROM hotel h WHERE h.name = d.name);
+CROSS JOIN (SELECT :demo_owner_id AS id) u
+WHERE NOT EXISTS (SELECT 1 FROM hotel h WHERE h.name = d.name AND h.owner_id = u.id);
 
 WITH demo_rooms (hotel_name, type, base_price, amenities, total_count, capacity) AS (
     VALUES
@@ -101,7 +112,7 @@ WITH demo_rooms (hotel_name, type, base_price, amenities, total_count, capacity)
 INSERT INTO room (hotel_id, type, base_price, photos, amenities, total_count, capacity, created_at, updated_at)
 SELECT h.id, d.type, d.base_price, ARRAY[]::TEXT[], d.amenities, d.total_count, d.capacity, now(), now()
 FROM demo_rooms d
-JOIN hotel h ON h.name = d.hotel_name
+JOIN hotel h ON h.name = d.hotel_name AND h.owner_id = :demo_owner_id
 WHERE NOT EXISTS (SELECT 1 FROM room r WHERE r.hotel_id = h.id AND r.type = d.type);
 
 -- Hotel search only returns properties with inventory for the whole requested stay. Re-running this
@@ -112,7 +123,7 @@ SELECT h.id, r.id, CURRENT_DATE + nights.day, 0, 0, r.total_count, 1.00, r.base_
 FROM hotel h
 JOIN room r ON r.hotel_id = h.id
 CROSS JOIN generate_series(0, 365) AS nights(day)
-WHERE h.owner_id = (SELECT id FROM app_user WHERE email = 'demo-catalog-owner@airstay.invalid')
+WHERE h.owner_id = :demo_owner_id
 ON CONFLICT (hotel_id, room_id, date) DO NOTHING;
 
 -- Search also needs this denormalized per-hotel "from" price.
@@ -121,7 +132,7 @@ SELECT h.id, CURRENT_DATE + nights.day, MIN(r.base_price), now(), now()
 FROM hotel h
 JOIN room r ON r.hotel_id = h.id
 CROSS JOIN generate_series(0, 365) AS nights(day)
-WHERE h.owner_id = (SELECT id FROM app_user WHERE email = 'demo-catalog-owner@airstay.invalid')
+WHERE h.owner_id = :demo_owner_id
 GROUP BY h.id, nights.day
 ON CONFLICT (hotel_id, date) DO UPDATE
 SET price = EXCLUDED.price, updated_at = EXCLUDED.updated_at;

@@ -1,10 +1,28 @@
-# Imports the original varied demo-image library into the local Compose database and attaches it to every
-# hotel and room created by seed-demo-catalog.sql. This bypasses the browser only to automate demo setup;
-# the resulting rows have the exact same catalog_photo schema and /api/v1/photos/{uuid} URLs as normal uploads.
-#
-# Prerequisite: docker compose is healthy and scripts/seed-demo-catalog.sql has already been run.
+# Imports the demo catalog and photo library in one transaction after Flyway has run.
+param(
+    [switch]$Remote,
+    [string]$OwnerEmail
+)
 
 $ErrorActionPreference = 'Stop'
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+
+if ($Remote) {
+    if ([string]::IsNullOrWhiteSpace($OwnerEmail) -or $OwnerEmail -eq 'demo-catalog-owner@airstay.invalid') {
+        throw 'Remote import requires -OwnerEmail for an existing, dedicated hotel manager account.'
+    }
+    foreach ($variable in 'PGHOST', 'PGPORT', 'PGDATABASE', 'PGUSER') {
+        if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($variable))) {
+            throw "Set $variable before running the remote demo import."
+        }
+    }
+    if ($env:PGSSLMODE -notin 'require', 'verify-ca', 'verify-full') {
+        throw 'Set PGSSLMODE=require or a certificate-verifying mode for remote import.'
+    }
+    $null = Get-Command psql -CommandType Application
+} elseif ($OwnerEmail) {
+    throw 'Use -Remote with -OwnerEmail. The local Compose import uses the local demo owner.'
+}
 
 $assets = @(
     @{ File = 'hotel-exterior.jpg'; Id = 'b23ab7ce-0246-4f3f-92c1-49ea58bb2001' },
@@ -22,34 +40,16 @@ $assets = @(
     @{ File = 'family.jpg'; Id = 'b23ab7ce-0246-4f3f-92c1-49ea58bb2203' }
 )
 
-foreach ($asset in $assets) {
+$images = foreach ($asset in $assets) {
     $path = Join-Path $PSScriptRoot "demo-assets\$($asset.File)"
     if (-not (Test-Path -LiteralPath $path)) {
         throw "Missing demo image: $path"
     }
-    docker compose cp $path "postgres:/tmp/$($asset.File)"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not copy $($asset.File) into the PostgreSQL container."
-    }
+    $hex = [BitConverter]::ToString([IO.File]::ReadAllBytes($path)).Replace('-', '')
+    "('$($asset.Id)', 'image/jpeg', decode('$hex', 'hex'))"
 }
 
-$sql = @'
-INSERT INTO catalog_photo (id, media_type, content) VALUES
-  ('b23ab7ce-0246-4f3f-92c1-49ea58bb2001', 'image/jpeg', pg_read_binary_file('/tmp/hotel-exterior.jpg')),
-  ('b23ab7ce-0246-4f3f-92c1-49ea58bb2002', 'image/jpeg', pg_read_binary_file('/tmp/room.jpg')),
-  ('b23ab7ce-0246-4f3f-92c1-49ea58bb2003', 'image/jpeg', pg_read_binary_file('/tmp/pool.jpg')),
-  ('b23ab7ce-0246-4f3f-92c1-49ea58bb2101', 'image/jpeg', pg_read_binary_file('/tmp/pune.jpg')),
-  ('b23ab7ce-0246-4f3f-92c1-49ea58bb2102', 'image/jpeg', pg_read_binary_file('/tmp/hyderabad.jpg')),
-  ('b23ab7ce-0246-4f3f-92c1-49ea58bb2103', 'image/jpeg', pg_read_binary_file('/tmp/bengaluru.jpg')),
-  ('b23ab7ce-0246-4f3f-92c1-49ea58bb2104', 'image/jpeg', pg_read_binary_file('/tmp/delhi.jpg')),
-  ('b23ab7ce-0246-4f3f-92c1-49ea58bb2105', 'image/jpeg', pg_read_binary_file('/tmp/mumbai.jpg')),
-  ('b23ab7ce-0246-4f3f-92c1-49ea58bb2106', 'image/jpeg', pg_read_binary_file('/tmp/nagpur.jpg')),
-  ('b23ab7ce-0246-4f3f-92c1-49ea58bb2107', 'image/jpeg', pg_read_binary_file('/tmp/jaipur.jpg')),
-  ('b23ab7ce-0246-4f3f-92c1-49ea58bb2201', 'image/jpeg', pg_read_binary_file('/tmp/king.jpg')),
-  ('b23ab7ce-0246-4f3f-92c1-49ea58bb2202', 'image/jpeg', pg_read_binary_file('/tmp/twin.jpg')),
-  ('b23ab7ce-0246-4f3f-92c1-49ea58bb2203', 'image/jpeg', pg_read_binary_file('/tmp/family.jpg'))
-ON CONFLICT (id) DO NOTHING;
-
+$attach = @'
 UPDATE hotel
 SET photos = ARRAY[
   CASE city
@@ -64,7 +64,7 @@ SET photos = ARRAY[
   '/api/v1/photos/b23ab7ce-0246-4f3f-92c1-49ea58bb2001',
   '/api/v1/photos/b23ab7ce-0246-4f3f-92c1-49ea58bb2003'
 ]
-WHERE owner_id = (SELECT id FROM app_user WHERE email = 'demo-catalog-owner@airstay.invalid');
+WHERE owner_id = :demo_owner_id;
 
 UPDATE room r
 SET photos = ARRAY[
@@ -77,12 +77,20 @@ SET photos = ARRAY[
 ]
 FROM hotel h
 WHERE h.id = r.hotel_id
-  AND h.owner_id = (SELECT id FROM app_user WHERE email = 'demo-catalog-owner@airstay.invalid');
+  AND h.owner_id = :demo_owner_id;
 '@
 
-$sql | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U airstay -d airstay
+$seed = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'seed-demo-catalog.sql'))
+$insertImages = 'INSERT INTO catalog_photo (id, media_type, content) VALUES ' +
+    ($images -join ",`n") + ' ON CONFLICT (id) DO NOTHING;'
+$sql = @('\encoding UTF8', $seed, $insertImages, $attach) -join "`n"
+if ($Remote) {
+    $sql | psql -X -v ON_ERROR_STOP=1 -v "demo_owner_email=$($OwnerEmail.Trim().ToLowerInvariant())" -1 -f -
+} else {
+    $sql | docker compose exec -T postgres psql -X -v ON_ERROR_STOP=1 -U airstay -d airstay -1 -f -
+}
 if ($LASTEXITCODE -ne 0) {
-    throw 'Could not import the demo photos.'
+    throw 'Could not import the demo catalog and photos.'
 }
 
 Write-Output 'Demo photos imported and attached to the seeded catalog.'

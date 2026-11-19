@@ -180,6 +180,8 @@ chosen from real places (a geocoding provider, through the backend), and ameniti
 
 ## Running with Docker (recommended)
 
+For the Railway portfolio deployment, see [Deploy AirStay to Railway](docs/railway.md).
+
 The AI stay assistant is on by default once a provider is configured. Operators can pause it for everyone under
 **Site admin → Site settings**. The switch is stored in PostgreSQL and leaves ordinary hotel search available.
 Grant the site-admin role to an existing, trusted account from a privileged database session:
@@ -214,9 +216,9 @@ production database. Search using the normal city picker and any date within the
 To add photos to a seeded hotel, sign in locally as `demo-catalog-owner@airstay.invalid` with password
 `AirStayDemo!2026`, open **Manage hotels**, and upload a JPEG or PNG in the hotel or room form. Files are validated
 (2 MB maximum and 4096 pixels per side) and stored in the local PostgreSQL `catalog_photo` table. These credentials
-exist only for local demonstration data; never run the seed script in production.
+are for local use only. The [Railway demo import](docs/railway.md#seed-the-public-demo) requires a separate manager account.
 
-To attach the included varied, original demo photos to every seeded property automatically, run:
+To seed the catalog and attach the included demo photos in one transaction, run:
 
 ```powershell
 .\scripts\import-demo-photos.ps1
