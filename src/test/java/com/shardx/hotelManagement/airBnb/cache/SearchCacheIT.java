@@ -68,6 +68,19 @@ class SearchCacheIT extends IntegrationTestBase {
     }
 
     @Test
+    void requiresEverySelectedAmenityAndSeparatesCachedResults() {
+        TestHotel hotel = createActiveHotel(newManagerToken(), 1, "1000.00");
+        jdbc.update("UPDATE hotel SET amenities = ARRAY['Gym', 'Free WiFi'] WHERE id = ?", hotel.hotelId());
+        String filter = "/hotels/search?city=" + hotel.city() + "&startDate=" + checkIn + "&endDate=" + checkOut;
+
+        assertThat(data(get(filter + "&amenities=Gym&amenities=WiFi", null)).path("content")).hasSize(1);
+        assertThat(data(get(filter + "&amenities=Gym&amenities=Spa", null)).path("content")).isEmpty();
+        assertThat(data(get(filter, null)).path("content")).hasSize(1);
+        assertThat(cacheKeys(hotel.city())).hasSize(3);
+        assertThat(get(filter + "&amenities=Invented", null).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     void aStaleSearchResultNeverCausesAnOverbooking() {
         TestHotel hotel = createActiveHotel(newManagerToken(), 1, "1000.00");
         search(hotel.city()); // fills the cache: the single room is listed as available

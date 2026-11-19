@@ -11,14 +11,16 @@ const VISIBLE_AMENITIES = 4;
 
 interface HotelCardProps {
   hotel: HotelSummary;
-  stay: Stay;
+  stay: Stay & { amenities?: string[] };
 }
 
 /** One search result: a photo, the hotel, its amenities and the price of its cheapest room per night. */
 export function HotelCard({ hotel, stay }: HotelCardProps) {
   const photo = hotel.photos?.[0];
   const amenities = hotel.amenities ?? [];
-  const to = `/hotels/${String(hotel.id)}?${stayToParams(stay).toString()}`;
+  const params = stayToParams(stay);
+  for (const amenity of stay.amenities ?? []) params.append('amenities', amenity);
+  const to = `/hotels/${String(hotel.id)}?${params.toString()}`;
 
   return (
     <Card className="relative flex flex-col gap-5 rounded-2xl p-4 transition-shadow hover:shadow-md sm:flex-row sm:items-center">

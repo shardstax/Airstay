@@ -1,13 +1,13 @@
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { ApiRequestError } from '@/shared/api/errors';
+import { useCatalog } from '@/shared/api/useCatalog';
 import { Button } from '@/shared/ui/Button';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { LinkButton } from '@/shared/ui/LinkButton';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import { HotelForm } from './HotelForm';
-import { useCatalog } from './useCatalog';
 import { useHotel } from './useHotels';
 
 /** Create a hotel, or edit the one in the address (/manage/hotels/new and /manage/hotels/:hotelId/edit). */

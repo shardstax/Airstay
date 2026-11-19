@@ -28,6 +28,7 @@ export function useHotelSearch(query: SearchQuery) {
             roomsCount: String(query.rooms),
             page: String(query.page - 1),
             size: String(PAGE_SIZE),
+            amenities: query.amenities,
           },
         },
       });

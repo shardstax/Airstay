@@ -50,7 +50,7 @@ class AirStayApplicationIT extends IntegrationTestBase {
             String name = parameter.path("name").asText();
             boolean required = parameter.path("required").asBoolean();
             switch (name) {
-                case "roomsCount", "page", "size" -> assertThat(required).as("%s is optional", name).isFalse();
+                case "roomsCount", "page", "size", "amenities" -> assertThat(required).as("%s is optional", name).isFalse();
                 case "city", "startDate", "endDate" -> assertThat(required).as("%s is required", name).isTrue();
                 default -> throw new AssertionError("Unexpected search parameter: " + name);
             }

@@ -87,6 +87,8 @@ public class InventoryServiceImpl implements InventoryService {
                 hotelSearchRequest.getEndDate().minusDays(1),
                 hotelSearchRequest.getRoomsCount(),
                 nights,
+                !hotelSearchRequest.getAmenities().isEmpty(),
+                hotelSearchRequest.getAmenities().toArray(String[]::new),
                 pageable);
 
         return hotelPage.map(hotelPriceDto -> {

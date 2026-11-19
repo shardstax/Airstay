@@ -227,6 +227,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ai/hotel-search/interpret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Interpret a natural-language hotel request into safe search filters */
+        post: operations["interpret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/photos": {
         parameters: {
             query?: never;
@@ -606,6 +623,39 @@ export interface components {
         LoginDto: {
             email: string;
             password: string;
+        };
+        /** @description Natural-language hotel search request */
+        AiHotelSearchRequest: {
+            /** @example Two rooms for two guests each in Pune on 19 and 20 November, breakfast and spa, budget 12000 */
+            message: string;
+            history?: components["schemas"]["Turn"][];
+        };
+        Turn: {
+            message: string;
+            reply: string;
+        };
+        /** @description Structured filters extracted from a guest's message; not a hotel result */
+        AiHotelSearchIntent: {
+            city?: string;
+            /** Format: date */
+            checkIn?: string;
+            /** Format: date */
+            checkOut?: string;
+            /** Format: int32 */
+            rooms?: number;
+            /** Format: int32 */
+            guestsPerRoom?: number;
+            amenities?: ("AIR_CONDITIONING" | "AIRPORT_SHUTTLE" | "BAR" | "BEACH_ACCESS" | "BREAKFAST" | "BUSINESS_CENTRE" | "GYM" | "LAUNDRY" | "PARKING" | "PET_FRIENDLY" | "POOL" | "RESTAURANT" | "ROOM_SERVICE" | "SPA" | "WIFI")[];
+            budgetInr?: number;
+            /** @enum {string} */
+            budgetScope?: "TOTAL_STAY" | "PER_ROOM_PER_NIGHT";
+        };
+        /** @description Parsed hotel-search filters and any required clarification */
+        AiHotelSearchInterpretation: {
+            intent?: components["schemas"]["AiHotelSearchIntent"];
+            missingFields?: string[];
+            unsupportedFilters?: string[];
+            readyForBasicSearch?: boolean;
         };
         UploadedPhoto: {
             url?: string;
@@ -1153,6 +1203,30 @@ export interface operations {
             };
         };
     };
+    interpret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiHotelSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AiHotelSearchInterpretation"];
+                };
+            };
+        };
+    };
     upload: {
         parameters: {
             query?: never;
@@ -1484,6 +1558,8 @@ export interface operations {
                 page?: string;
                 /** @description Page size (max 50) */
                 size?: string;
+                /** @description Required hotel amenities. A hotel must offer every selected amenity. */
+                amenities?: string[];
             };
             header?: never;
             path?: never;

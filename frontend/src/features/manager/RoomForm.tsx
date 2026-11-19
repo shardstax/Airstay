@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
 import { describeRequestError } from '@/shared/api/errors';
+import type { Catalog } from '@/shared/api/useCatalog';
 import { Button } from '@/shared/ui/Button';
 import { CheckboxGroup } from '@/shared/ui/CheckboxGroup';
 import { Input } from '@/shared/ui/Input';
@@ -11,7 +12,6 @@ import { Select } from '@/shared/ui/Select';
 import { MAX_PHOTOS } from './hotelSchema';
 import { roomSchema, type RoomValues } from './roomSchema';
 import { UrlListField } from './UrlListField';
-import type { Catalog } from './useCatalog';
 import { type SavedRoom, useSaveRoom } from './useRooms';
 
 interface RoomFormProps {

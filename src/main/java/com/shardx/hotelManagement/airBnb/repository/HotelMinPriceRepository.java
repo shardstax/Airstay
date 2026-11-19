@@ -23,6 +23,9 @@ public interface HotelMinPriceRepository extends JpaRepository<HotelMinPrice, Lo
             FROM HotelMinPrice mp
             WHERE mp.hotel.city = :city
               AND mp.hotel.active = true
+              AND ( :filterAmenities = false OR cast(
+                    sql('array_replace(?, ''Free WiFi'', ''WiFi'') @> cast(? as text[])',
+                        mp.hotel.amenities, :amenities) AS Boolean) = true )
               AND mp.date BETWEEN :startDate AND :endDate
               AND mp.hotel.id IN (
                     SELECT i.hotel.id
@@ -41,6 +44,9 @@ public interface HotelMinPriceRepository extends JpaRepository<HotelMinPrice, Lo
             FROM HotelMinPrice mp
             WHERE mp.hotel.city = :city
               AND mp.hotel.active = true
+              AND ( :filterAmenities = false OR cast(
+                    sql('array_replace(?, ''Free WiFi'', ''WiFi'') @> cast(? as text[])',
+                        mp.hotel.amenities, :amenities) AS Boolean) = true )
               AND mp.date BETWEEN :startDate AND :endDate
               AND mp.hotel.id IN (
                     SELECT i.hotel.id
@@ -59,6 +65,8 @@ public interface HotelMinPriceRepository extends JpaRepository<HotelMinPrice, Lo
             @Param("endDate") LocalDate endDate,
             @Param("roomsCount") Integer roomsCount,
             @Param("dateCount") Long dateCount,
+            @Param("filterAmenities") boolean filterAmenities,
+            @Param("amenities") String[] amenities,
             Pageable pageable
     );
 

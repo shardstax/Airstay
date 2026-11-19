@@ -84,9 +84,9 @@ describe('the hotel page', () => {
     });
   });
 
-  it('links back to the search, with the same dates and the hotel’s city', async () => {
+  it('links back to the search with the dates, city and selected amenities', async () => {
     mockApi({ 'GET /hotels/7/info': { data: info([room(1, 'Deluxe', 2500)]) } });
-    renderHotel(hotelUrl());
+    renderHotel(`${hotelUrl()}&amenities=Gym&amenities=Breakfast`);
 
     const back = await screen.findByRole('link', { name: 'Back to results' });
     const params = new URLSearchParams(back.getAttribute('href')?.split('?')[1]);
@@ -94,6 +94,7 @@ describe('the hotel page', () => {
     expect(params.get('city')).toBe('Pune');
     expect(params.get('startDate')).toBe(startDate);
     expect(params.get('endDate')).toBe(endDate);
+    expect(params.getAll('amenities')).toEqual(['Gym', 'Breakfast']);
   });
 
   it('explains when no room type is free for the whole stay', async () => {

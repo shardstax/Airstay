@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 
 import { ApiRequestError, describeRequestError } from '@/shared/api/errors';
+import { useCatalog } from '@/shared/api/useCatalog';
 import { Badge } from '@/shared/ui/Badge';
 import { Button } from '@/shared/ui/Button';
 import { EmptyState } from '@/shared/ui/EmptyState';
@@ -10,7 +11,6 @@ import { Skeleton } from '@/shared/ui/Skeleton';
 import { BookingsSection } from './BookingsSection';
 import { ReportSection } from './ReportSection';
 import { RoomsSection } from './RoomsSection';
-import { useCatalog } from './useCatalog';
 import { useActivateHotel, useHotel } from './useHotels';
 import { useRooms } from './useRooms';
 

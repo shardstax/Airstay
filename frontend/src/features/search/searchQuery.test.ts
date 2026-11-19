@@ -42,6 +42,16 @@ describe('search URL parameters', () => {
     expect(parseSearchParams(params, now)?.page).toBe(3);
   });
 
+  it('keeps every selected amenity across pagination and page reloads', () => {
+    const params = toSearchParams({ ...values, page: 3, amenities: ['Gym', 'Airport shuttle', 'Gym'] });
+    expect(params.getAll('amenities')).toEqual(['Airport shuttle', 'Gym']);
+    expect(parseSearchParams(params, now)).toEqual({
+      ...values,
+      page: 3,
+      amenities: ['Airport shuttle', 'Gym'],
+    });
+  });
+
   it('encodes a city with spaces and punctuation safely', () => {
     const city = 'Rishikesh & Haridwar';
 

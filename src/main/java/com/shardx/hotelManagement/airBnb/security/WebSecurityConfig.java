@@ -34,6 +34,7 @@ public class WebSecurityConfig {
             "/actuator/health",
             "/actuator/health/**",
             "/actuator/info",
+            "/ai/hotel-search/**",
             "/error"
     };
 

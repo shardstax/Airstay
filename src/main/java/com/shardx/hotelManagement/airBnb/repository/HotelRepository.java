@@ -14,6 +14,14 @@ import java.util.List;
 public interface HotelRepository extends JpaRepository<Hotel, Long> {
     List<Hotel> findByOwner(User user);
 
+    @Query(value = """
+            SELECT DISTINCT city FROM hotel
+            WHERE active AND (lower(city) = :name OR lower(trim(split_part(city, ',', 1))) = :name)
+            ORDER BY city
+            LIMIT 2
+            """, nativeQuery = true)
+    List<String> findActiveCityLabels(String name);
+
     /**
      * Just the ids, in a stable order, one page at a time (a Slice, so no extra count query). Loading whole hotels is
      * expensive because every hotel eagerly loads its owner and the owner's roles, and the price refresh only needs the id.
