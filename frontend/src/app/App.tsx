@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
 
+import { AiSettingsPage } from '@/features/admin/AiSettingsPage';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { SignupPage } from '@/features/auth/SignupPage';
 import { BookingPage } from '@/features/booking/BookingPage';
@@ -76,6 +77,7 @@ export function App() {
                 <Route path="/signup" element={<SignupPage />} />
               </Route>
               <Route element={<RequireAuth />}>
+                <Route path="/admin/settings" element={<AiSettingsPage />} />
                 <Route path="/account" element={<AccountLayout />}>
                   <Route index element={<ProfilePage />} />
                   <Route path="bookings" element={<BookingsPage />} />

@@ -180,6 +180,18 @@ chosen from real places (a geocoding provider, through the backend), and ameniti
 
 ## Running with Docker (recommended)
 
+The AI stay assistant is on by default once a provider is configured. Operators can pause it for everyone under
+**Site admin → Site settings**. The switch is stored in PostgreSQL and leaves ordinary hotel search available.
+Grant the site-admin role to an existing, trusted account from a privileged database session:
+
+```sql
+INSERT INTO app_user_roles (user_id, role)
+SELECT id, 'ADMIN' FROM app_user WHERE email = 'replace-with-your-admin-email'
+ON CONFLICT DO NOTHING;
+```
+
+Refresh the browser after granting the role. Public signup can only assign guest and hotel-manager roles.
+
 Only Docker is required; the Java builds happen inside the images.
 
 ```bash

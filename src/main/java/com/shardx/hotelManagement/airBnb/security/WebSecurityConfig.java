@@ -55,6 +55,7 @@ public class WebSecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         .requestMatchers(HttpMethod.GET, "/hotels/**", "/places", "/catalog", "/photos/*").permitAll()
+                        .requestMatchers("/admin/ai-search/**").hasRole("ADMIN")
                         .requestMatchers("/admin/**").hasRole("HOTEL_MANAGER")
                         .anyRequest().authenticated() // deny by default
                 )

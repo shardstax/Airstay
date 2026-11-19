@@ -58,6 +58,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/ai-search/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAiSearchSettings"];
+        put: operations["setAiSearchSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhook/payment": {
         parameters: {
             query?: never;
@@ -479,6 +495,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ai/hotel-search/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAiSearchStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/hotels/{hotelId}/reports": {
         parameters: {
             query?: never;
@@ -556,6 +588,13 @@ export interface components {
             /** Format: int32 */
             capacity: number;
         };
+        AiSearchUpdate: {
+            enabled: boolean;
+        };
+        Settings: {
+            enabled?: boolean;
+            configured?: boolean;
+        };
         BookingPaymentInitResponseDto: {
             sessionUrl: string;
         };
@@ -604,7 +643,7 @@ export interface components {
             password: string;
             name: string;
             /** @enum {string} */
-            accountType?: "GUEST" | "HOTEL_MANAGER";
+            accountType?: "GUEST" | "HOTEL_MANAGER" | "ADMIN";
         };
         UserDto: {
             /** Format: int64 */
@@ -615,7 +654,7 @@ export interface components {
             gender?: "MALE" | "FEMALE" | "OTHER";
             /** Format: date */
             dateOfBirth?: string;
-            roles: ("GUEST" | "HOTEL_MANAGER")[];
+            roles: ("GUEST" | "HOTEL_MANAGER" | "ADMIN")[];
         };
         LoginResponseDto: {
             accessToken: string;
@@ -734,6 +773,9 @@ export interface components {
         BookingStatusResponseDto: {
             /** @enum {string} */
             bookingStatus: "RESERVED" | "GUESTS_ADDED" | "PAYMENTS_PENDING" | "CONFIRMED" | "CANCELLED" | "EXPIRED";
+        };
+        AiSearchStatus: {
+            available?: boolean;
         };
         InventoryDto: {
             /** Format: int64 */
@@ -949,6 +991,50 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    getAiSearchSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Settings"];
+                };
+            };
+        };
+    };
+    setAiSearchSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiSearchUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Settings"];
+                };
             };
         };
     };
@@ -1638,6 +1724,26 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["BookingStatusResponseDto"];
+                };
+            };
+        };
+    };
+    getAiSearchStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AiSearchStatus"];
                 };
             };
         };
