@@ -33,6 +33,7 @@ JOIN app_user_roles r ON r.user_id = u.id
 WHERE u.email = :'demo_owner_email' AND r.role = 'HOTEL_MANAGER'
 \gset
 
+-- Catalog rows begin here. The first-launch loader uses the same SQL.
 WITH demo_hotels (name, city, place_id, address, phone_number, email, location, amenities) AS (
     VALUES
         ('The Deccan Courtyard', 'Pune, Maharashtra, India', 1259229, 'FC Road, Shivajinagar, Pune', '+91 20 4100 1200', 'pune@demo.airstay.invalid', 'Shivajinagar', ARRAY['Free WiFi', 'Breakfast', 'Parking', 'Gym']::TEXT[]),

@@ -23,6 +23,8 @@ COPY --from=build /workspace/extracted/dependencies/ ./
 COPY --from=build /workspace/extracted/spring-boot-loader/ ./
 COPY --from=build /workspace/extracted/snapshot-dependencies/ ./
 COPY --from=build /workspace/extracted/application/ ./
+COPY scripts/seed-demo-catalog.sql scripts/attach-demo-photos.sql scripts/demo-photos.csv /app/demo/
+COPY scripts/demo-assets /app/demo/demo-assets/
 
 USER airstay
 EXPOSE 8080

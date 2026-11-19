@@ -12,7 +12,7 @@ Create these services in the same Railway project and environment:
 | --- | --- |
 | Postgres | Railway PostgreSQL template, with its persistent volume and private network |
 | Redis | Railway Redis template, with credentials and private networking |
-| API | GitHub repo, branch `chore/prod-deploy-data`, root directory `/`, port `8080`, health path `/api/v1/actuator/health` |
+| API | GitHub repo, branch `chore/prod-deploy-data`, root directory `/`, port `8080`, health path `/api/v1/actuator/health/readiness` |
 | Frontend | Same GitHub branch, root directory `/frontend`, port `80`, health path `/healthz`, Railway public domain |
 
 Expose the frontend publicly. Nginx proxies `/api/` to the API so the browser, Stripe webhooks, and secure
@@ -35,6 +35,7 @@ SPRING_DATA_REDIS_URL=${{Redis.REDIS_URL}}
 FRONTEND_URL=https://your-frontend.up.railway.app
 CORS_ALLOWED_ORIGINS=https://your-frontend.up.railway.app
 EVENTS_ENABLED=false
+DEMO_SEED_ON_STARTUP=true
 AI_SEARCH_ENABLED=true
 AI_CHAT_MODEL_PROVIDER=openai
 AI_SEARCH_DAILY_REQUEST_LIMIT=200
@@ -63,7 +64,13 @@ those services before you accept real payments.
 
 ## Seed the public demo
 
-Wait for the API to apply Flyway migrations. Create a dedicated hotel-manager account in the public app
+With `DEMO_SEED_ON_STARTUP=true`, the API populates a fresh catalog after Flyway runs. The hotels, availability,
+photos, and completion marker are written together. Subsequent starts skip the import. This mode refuses
+to seed a database that already contains hotels. Demo inventory belongs to a dedicated account with a
+random password that is never published.
+
+For a manual import instead, set `DEMO_SEED_ON_STARTUP=false`. Wait for the API to apply Flyway migrations.
+Create a dedicated hotel-manager account in the public app
 with a private password. Use a PostgreSQL client over an approved database connection with TLS. Set
 `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGSSLMODE` in your shell, and use a local password file
 or interactive password prompt for authentication.
