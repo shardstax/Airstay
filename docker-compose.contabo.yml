@@ -1,0 +1,57 @@
+# Apply after docker-compose.yml on a dedicated VPS deployment.
+services:
+  postgres:
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a unique PostgreSQL password}
+
+  redis:
+    restart: unless-stopped
+
+  kafka:
+    restart: unless-stopped
+
+  mailpit:
+    restart: unless-stopped
+
+  app:
+    ports: !reset []
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set a unique PostgreSQL password}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set a dedicated JWT signing secret}
+      FRONTEND_URL: https://${AIRSTAY_HOST:?Set your public hostname}
+      CORS_ALLOWED_ORIGINS: https://${AIRSTAY_HOST:?Set your public hostname}
+      DEMO_SEED_ON_STARTUP: ${DEMO_SEED_ON_STARTUP:-true}
+      AI_SEARCH_ENABLED: "true"
+      AI_CHAT_MODEL_PROVIDER: openai
+      AI_SEARCH_DAILY_REQUEST_LIMIT: ${AI_SEARCH_DAILY_REQUEST_LIMIT:-200}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Set a restricted OpenAI project key}
+      API_DOCS_ENABLED: "false"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/api/v1/actuator/health/readiness"]
+
+  frontend:
+    ports: !reset []
+    environment:
+      AIRSTAY_FORWARDED_PROTO: https
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      frontend:
+        condition: service_healthy
+    environment:
+      AIRSTAY_HOST: ${AIRSTAY_HOST:?Set your public hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/contabo/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:
