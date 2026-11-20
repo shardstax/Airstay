@@ -31,7 +31,7 @@ interface Turn {
   result: Interpretation;
 }
 
-const storageKey = 'airstay:stay-assistant:v1';
+const storageKey = 'airstay:stay-assistant:v2';
 const popoverId = 'stay-assistant';
 const maxTurns = 12;
 
@@ -66,7 +66,9 @@ function assistantReply({ intent, missingFields }: Interpretation) {
   ].filter(Boolean);
   const recap = parts.length ? parts.join(' · ') + '\n\n' : '';
 
-  if (missingFields.includes('city')) return recap + 'Which city would you like to stay in?';
+  if (missingFields.includes('city')) {
+    return recap + 'Which city and state would you like to search? Use a destination listed in AirStay.';
+  }
   if (missingFields.includes('checkIn') && missingFields.includes('checkOut')) {
     return recap + 'What are your check-in and check-out dates?';
   }

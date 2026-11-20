@@ -10,8 +10,8 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "airstay.ai.search")
 public class AiSearchProperties {
 
-    /** A false value means no model request can be made. This is the safe default. */
-    private boolean enabled;
+    /** A false value means no model request can be made. */
+    private boolean enabled = true;
 
     /** Block paid model requests if the shared limiter cannot count them. */
     private boolean requireQuota;

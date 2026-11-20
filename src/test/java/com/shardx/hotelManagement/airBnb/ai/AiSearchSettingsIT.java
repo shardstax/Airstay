@@ -9,7 +9,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.Map;
@@ -18,7 +17,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-@TestPropertySource(properties = "airstay.ai.search.enabled=true")
 class AiSearchSettingsIT extends IntegrationTestBase {
 
     private static final String SETTINGS = "/admin/ai-search/settings";

@@ -94,7 +94,7 @@ services:
       PLACES_PROVIDER: "${PLACES_PROVIDER:-open-meteo}"
       RATE_LIMIT_ENABLED: "${RATE_LIMIT_ENABLED:-true}"
       # Optional AI hotel search. The API key remains in .env (local) or a deployment secret, never source control.
-      AI_SEARCH_ENABLED: "${AI_SEARCH_ENABLED:-false}"
+      AI_SEARCH_ENABLED: "${AI_SEARCH_ENABLED:-true}"
       AI_CHAT_MODEL_PROVIDER: "${AI_CHAT_MODEL_PROVIDER:-none}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
     healthcheck:

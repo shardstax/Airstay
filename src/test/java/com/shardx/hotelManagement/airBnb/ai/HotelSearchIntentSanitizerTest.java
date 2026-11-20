@@ -36,6 +36,7 @@ class HotelSearchIntentSanitizerTest {
 
     @Test
     void rejectsPastOrInvalidModelValuesAndAsksForTheRequiredFields() {
+        when(hotels.findActiveCityLabels("pune")).thenReturn(List.of("Pune, Maharashtra, India"));
         AiHotelSearchInterpretation result = sanitizer.sanitize(new AiHotelSearchIntent(
                 "Pune", LocalDate.of(2026, 11, 17), LocalDate.of(2026, 11, 17), 99, 0,
                 null, new BigDecimal("-1"), BudgetScope.TOTAL_STAY));
@@ -50,13 +51,38 @@ class HotelSearchIntentSanitizerTest {
 
     @Test
     void requiresTheBudgetBasisBeforeCallingAResponseComplete() {
+        when(hotels.findActiveCityLabels("bengaluru")).thenReturn(List.of("Bengaluru, Karnataka, India"));
         AiHotelSearchInterpretation result = sanitizer.sanitize(new AiHotelSearchIntent(
                 "Bangalore", LocalDate.of(2026, 11, 20), LocalDate.of(2026, 11, 22), 1, null,
                 Set.of(), new BigDecimal("4000"), null));
 
-        assertThat(result.intent().city()).isEqualTo("Bengaluru");
+        assertThat(result.intent().city()).isEqualTo("Bengaluru, Karnataka, India");
         assertThat(result.missingFields()).containsExactly("budgetScope");
         assertThat(result.unsupportedFilters()).containsExactly("budgetInr");
         assertThat(result.readyForBasicSearch()).isFalse();
+    }
+
+    @Test
+    void asksForClarificationUntilAQualifiedCityMatchesTheCatalog() {
+        when(hotels.findActiveCityLabels("springfield"))
+                .thenReturn(List.of("Springfield, Illinois, United States", "Springfield, Missouri, United States"));
+        when(hotels.findActiveCityLabels("springfield, illinois"))
+                .thenReturn(List.of("Springfield, Illinois, United States"));
+
+        for (String city : List.of("Imaginary City", "Springfield")) {
+            var result = sanitizeCity(city);
+            assertThat(result.intent().city()).isNull();
+            assertThat(result.missingFields()).containsExactly("city");
+            assertThat(result.readyForBasicSearch()).isFalse();
+        }
+
+        var corrected = sanitizeCity(" Springfield , Illinois ");
+        assertThat(corrected.intent().city()).isEqualTo("Springfield, Illinois, United States");
+        assertThat(corrected.readyForBasicSearch()).isTrue();
+    }
+
+    private AiHotelSearchInterpretation sanitizeCity(String city) {
+        return sanitizer.sanitize(new AiHotelSearchIntent(city,
+                LocalDate.of(2026, 11, 20), LocalDate.of(2026, 11, 22), 1, null, Set.of(), null, null));
     }
 }

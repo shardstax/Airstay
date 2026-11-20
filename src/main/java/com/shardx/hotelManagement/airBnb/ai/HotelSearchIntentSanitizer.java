@@ -26,7 +26,6 @@ public class HotelSearchIntentSanitizer {
             Map.entry("pune", "Pune"),
             Map.entry("hyderabad", "Hyderabad"),
             Map.entry("delhi", "Delhi"),
-            Map.entry("new delhi", "Delhi"),
             Map.entry("nagpur", "Nagpur")
     );
 
@@ -69,11 +68,14 @@ public class HotelSearchIntentSanitizer {
 
     private String canonicalCity(String rawCity) {
         if (rawCity == null || rawCity.isBlank() || rawCity.length() > 100) return null;
-        String normalized = rawCity.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
-        String name = CITY_ALIASES.getOrDefault(normalized, rawCity.trim());
-        List<String> labels = hotels.findActiveCityLabels(name.toLowerCase(Locale.ROOT));
-        if (labels.size() == 1) return labels.getFirst();
-        return labels.isEmpty() ? name : null;
+        String normalized = rawCity.strip().replaceAll("\\s+", " ").replaceAll("\\s*,\\s*", ", ")
+                .toLowerCase(Locale.ROOT);
+        int comma = normalized.indexOf(',');
+        String city = comma < 0 ? normalized : normalized.substring(0, comma);
+        String qualifier = comma < 0 ? "" : normalized.substring(comma);
+        String name = CITY_ALIASES.getOrDefault(city, city).toLowerCase(Locale.ROOT) + qualifier;
+        List<String> labels = hotels.findActiveCityLabels(name);
+        return labels.size() == 1 ? labels.getFirst() : null;
     }
 
     private LocalDate usableCheckIn(LocalDate date) {

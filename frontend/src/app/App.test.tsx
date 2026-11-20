@@ -9,6 +9,7 @@ import { App } from './App';
 
 const noSession = {
   'POST /auth/refresh': { status: 401, error: { message: 'Refresh token cookie is missing' } },
+  'GET /ai/hotel-search/status': { data: { available: false } },
 };
 const restorableSession = {
   'POST /auth/refresh': { data: { accessToken: 'restored' } },
